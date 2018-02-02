@@ -1,5 +1,5 @@
 (ns provisdom.integration-test
-  (:require [provisdom.todo.specs :as specs]
+  (:require [provisdom.todo.common :as common]
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
             [provisdom.maali.rules :as rules]
@@ -13,12 +13,12 @@
             (todo/new-todo "Make all rendering async")
             (todo/new-todo "Allow any arguments to component functions")])
 
-(def session (apply rules/insert todo/session ::specs/Todo todos))
+(def session (apply rules/insert todo/session ::todo/Todo todos))
 
 (defn gen-response
   [request]
-  (let [response (sg/generate (s/gen (specs/request->response (rules/spec-type request))))]
-    (assoc response ::specs/Request request)))
+  (let [response (sg/generate (s/gen (todo/request->response (rules/spec-type request))))]
+    (assoc response ::common/Request request)))
 
 (defn select-request
   [session]
@@ -38,7 +38,7 @@
       (when-some [session (<! session-ch)]
         (view/run session)
         (let [request (select-request session)
-              response-fn (::specs/response-fn request)
+              response-fn (::common/response-fn request)
               response (gen-response request)]
           (response-fn response))
         (<! (async/timeout delay-ms))
@@ -60,7 +60,7 @@
                   (loop [[request & requests] requests
                          session session]
                     (if request
-                      (let [response-fn (::specs/response-fn request)
+                      (let [response-fn (::common/response-fn request)
                             response (gen-response request)]
                         (response-fn response)
                         (recur requests (<! session-ch)))

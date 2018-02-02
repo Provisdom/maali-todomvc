@@ -1,23 +1,47 @@
 (ns provisdom.todo.rules
   (:require [clojure.spec.alpha :as s]
             [clojure.core.async :as async]
-            [provisdom.todo.specs :as specs]
-            [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession] :as rules]
+            [provisdom.todo.common :as common]
+            [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [clara.rules.accumulators :as acc]
             [provisdom.maali.listeners :as listeners]
             [net.cgrand.xforms :as xforms]))
 
-;;; Input channel for responses
-(def response-ch (async/chan 10))
+;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
+(s/def ::time nat-int?)
+(s/def ::Anchor (s/keys :req [::time]))
 
-;;; Used to fill in the ::specs/response-fn field in requests. The code which responds
-;;; to a request can use ::specs/response-fn to provide the response.
-(defn response
-  [spec response]
-  (if (s/valid? spec response)
-    (async/put! response-ch [spec response])
-    (throw (ex-info (str "Invalid response - must conform to spec " spec)
-                    {:response response :spec spec :explanation (s/explain-data spec response)}))))
+(s/def ::id uuid?)
+(s/def ::title string?)
+(s/def ::done boolean?)
+(s/def ::created-at ::time)
+(s/def ::Todo (s/keys :req [::id ::title ::done]))
+
+(s/def ::visibility #{:all :active :completed})
+(s/def ::Visibility (s/keys :req [::visibility]))
+
+(def-derive ::NewTodoRequest ::common/Request)
+(def-derive ::NewTodoResponse ::common/Response (s/merge ::common/Response (s/keys :req [::Todo])))
+(def-derive ::UpdateTodoRequest ::common/Request (s/merge ::common/Request (s/keys :req [::Todo])))
+(def-derive ::UpdateTitleRequest ::UpdateTodoRequest)
+(def-derive ::UpdateTitleResponse ::common/Response (s/merge ::common/Response (s/keys :req [::title])))
+(def-derive ::UpdateDoneRequest ::UpdateTodoRequest)
+(def-derive ::UpdateDoneResponse ::common/Response (s/merge ::common/Response (s/keys :req [::done])))
+(def-derive ::RetractTodoRequest ::UpdateTodoRequest)
+(def-derive ::CompleteAllRequest ::common/Request (s/merge ::common/Request (s/keys :req [::done])))
+(def-derive ::RetractCompletedRequest ::common/Request)
+(s/def ::visibilities (s/coll-of ::visibility :kind set?))
+(def-derive ::VisibilityRequest ::common/Request (s/merge ::common/Request (s/keys :req [::visibilities])))
+(def-derive ::VisibilityResponse ::common/Response (s/merge ::common/Response (s/keys :req [::visibility])))
+
+(def request->response
+  {::NewTodoRequest ::NewTodoResponse
+   ::UpdateTitleRequest ::UpdateTitleResponse
+   ::UpdateDoneRequest ::UpdateDoneResponse
+   ::RetractTodoRequest ::common/Response
+   ::CompleteAllRequest ::common/Response
+   ::RetractCompletedRequest ::common/Response
+   ::VisibilityRequest ::VisibilityResponse})
 
 ;;; Reducing function to produce the new session from a supplied response.
 (defn handle-response
@@ -32,7 +56,7 @@
 ;;; i.e. updated sessions.
 (def handle-response-xf
   (comp
-    (xforms/reductions (listeners/session-reducer-with-query-listener handle-response) nil)
+    (xforms/reductions handle-response nil)
     (drop 1)))                                              ;;; drop the initial nil value
 
 ;;; Convenience function to create new ::Todo facts
@@ -41,143 +65,140 @@
 (defn new-todo
   ([title] (new-todo title (now)))
   ([title time]
-   #::specs{:id (random-uuid) :title title :done false :created-at time}))
+   {::id (random-uuid) ::title title ::done false ::created-at time}))
 
 ;;; Rules
 (defrules rules
-  [::retract-orphan-response!
-   "Responses are inserted unconditionally from outside the rule engine, so
-    explicitly retract any responses without a corresponding request."
-   [?response <- ::specs/Response (= ?request Request)]
-   [:not [?request <- ::specs/Request]]
-   =>
-   (rules/retract! ::specs/Response ?response)]
-
   [::anchor!
    "Initialize visibility and the request for a new todo. Both are singletons
     so insert unconditionally here."
-   [::specs/Anchor (= ?time time)]
+   [::Anchor (= ?time time)]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::specs/Visibility {::specs/visibility :all})
-   (rules/insert-unconditional! ::specs/NewTodoRequest {::specs/response-fn (partial response ::specs/NewTodoResponse)})]
+   (rules/insert-unconditional! ::Visibility {::visibility :all})
+   (rules/insert-unconditional! ::NewTodoRequest {::common/response-fn (partial common/response ?response-fn ::NewTodoResponse)})]
 
   [::new-todo-response!
    "Handle a new todo."
-   [?request <- ::specs/NewTodoRequest]
-   [::specs/NewTodoResponse (= ?request Request) (= ?todo Todo)]
+   [?request <- ::NewTodoRequest]
+   [::NewTodoResponse (= ?request Request) (= ?todo Todo)]
    =>
-   (rules/insert-unconditional! ::specs/Todo ?todo)
-   (rules/upsert! ::specs/NewTodoRequest ?request assoc ::specs/time (now))]
+   (rules/insert-unconditional! ::Todo ?todo)
+   (rules/upsert! ::NewTodoRequest ?request assoc ::time (now))]
 
   [::update-request!
    "When visibility changes or a new todo is inserted, conditionally insert
     requests to update todos."
-   [?todo <- ::specs/Todo]
+   [?todo <- ::Todo]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::specs/UpdateTitleRequest #::specs{:Todo ?todo :response-fn (partial response ::specs/UpdateTitleResponse)})
-   (rules/insert! ::specs/UpdateDoneRequest #::specs{:Todo ?todo :response-fn (partial response ::specs/UpdateDoneResponse)})
-   (rules/insert! ::specs/RetractTodoRequest #::specs{:Todo ?todo :response-fn (partial response ::specs/Response)})]
+   (rules/insert! ::UpdateTitleRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::UpdateTitleResponse)})
+   (rules/insert! ::UpdateDoneRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::UpdateDoneResponse)})
+   (rules/insert! ::RetractTodoRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::common/Response)})]
 
   [::update-title-response!
    "Handle response to a title update request."
-   [?request <- ::specs/UpdateTitleRequest (= ?todo Todo)]
-   [::specs/UpdateTitleResponse (= ?request Request) (= ?title title)]
+   [?request <- ::UpdateTitleRequest (= ?todo Todo)]
+   [::UpdateTitleResponse (= ?request Request) (= ?title title)]
    =>
-   (rules/upsert! ::specs/Todo ?todo assoc ::specs/title ?title)]
+   (rules/upsert! ::Todo ?todo assoc ::title ?title)]
 
   [::update-done-response!
    "Handle response to a one update request."
-   [?request <- ::specs/UpdateDoneRequest (= ?todo Todo)]
-   [::specs/UpdateDoneResponse (= ?request Request) (= ?done done)]
+   [?request <- ::UpdateDoneRequest (= ?todo Todo)]
+   [::UpdateDoneResponse (= ?request Request) (= ?done done)]
    =>
-   (rules/upsert! ::specs/Todo ?todo assoc ::specs/done ?done)]
+   (rules/upsert! ::Todo ?todo assoc ::done ?done)]
 
   [::retract-todo-response!
    "Handle response to retract todo request."
-   [?request <- ::specs/RetractTodoRequest (= ?todo Todo)]
-   [::specs/Response (= ?request Request)]
+   [?request <- ::RetractTodoRequest (= ?todo Todo)]
+   [::common/Response (= ?request Request)]
    =>
-   (rules/retract! ::specs/Todo ?todo)]
+   (rules/retract! ::Todo ?todo)]
 
   [::complete-all-request!
    "Toggles the done attribute of all todos. If all todos are not done,
     then the request implies we set them all to done. If all todos are
     done, then the request means we will set them all to not done."
-   [?todos <- (acc/grouping-by ::specs/done) :from [::specs/Todo]]
+   [?todos <- (acc/grouping-by ::done) :from [::Todo]]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::specs/CompleteAllRequest #::specs{:done        (not= 0 (count (?todos false)))
-                                                      :response-fn (partial response ::specs/Response)})]
+   (rules/insert! ::CompleteAllRequest {::done        (not= 0 (count (?todos false)))
+                                                      ::common/response-fn (partial common/response ?response-fn ::common/Response)})]
 
   [::complete-all-response!
    "Handle response to complete all request."
-   [?request <- ::specs/CompleteAllRequest (= ?done done)]
-   [::specs/Response (= ?request Request)]
-   [?todos <- (acc/all) :from [::specs/Todo (= (not ?done) done)]]
+   [?request <- ::CompleteAllRequest (= ?done done)]
+   [::common/Response (= ?request Request)]
+   [?todos <- (acc/all) :from [::Todo (= (not ?done) done)]]
    =>
-   (rules/upsert-seq! ::specs/Todo ?todos update ::specs/done not)]
+   (rules/upsert-seq! ::Todo ?todos update ::done not)]
 
   [::retract-completed-request!
    "Request to retract all todo's marked done."
-   [?todos <- (acc/all) :from [::specs/Todo (= true done)]]
+   [?todos <- (acc/all) :from [::Todo (= true done)]]
    [:test (not-empty ?todos)]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::specs/RetractCompletedRequest #::specs{:response-fn (partial response ::specs/Response)})]
+   (rules/insert! ::RetractCompletedRequest {::common/response-fn (partial common/response ?response-fn ::common/Response)})]
 
   [::retract-completed-response!
    "Handle response to retract completed request."
-   [?request <- ::specs/RetractCompletedRequest]
-   [::specs/Response (= ?request Request)]
-   [?todos <- (acc/all) :from [::specs/Todo (= true done)]]
+   [?request <- ::RetractCompletedRequest]
+   [::common/Response (= ?request Request)]
+   [?todos <- (acc/all) :from [::Todo (= true done)]]
    =>
-   (apply rules/retract! ::specs/Todo ?todos)]
+   (apply rules/retract! ::Todo ?todos)]
 
   [::visibility-request!
    "Request to update the visibility. Includes the valid choices for
     visibility given the current set of todos, e.g. if no todos are
     marked done, don't include completed as a valid option."
-   [::specs/Visibility (= ?visibility visibility)]
-   [?todos <- (acc/grouping-by ::specs/done) :from [::specs/Todo]]
+   [::Visibility (= ?visibility visibility)]
+   [?todos <- (acc/grouping-by ::done) :from [::Todo]]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (let [visibilities (cond-> #{:all}
                               (not= 0 (count (?todos true))) (conj :completed)
                               (not= 0 (count (?todos false))) (conj :active))]
-     (rules/insert! ::specs/VisibilityRequest #::specs{:visibility   ?visibility
-                                                       :visibilities visibilities
-                                                       :response-fn  (partial response ::specs/VisibilityResponse)}))]
+     (rules/insert! ::VisibilityRequest {::visibility   ?visibility
+                                                       ::visibilities visibilities
+                                                       ::common/response-fn  (partial common/response ?response-fn ::VisibilityResponse)}))]
 
   [::visibility-response!
    "Handle response to visibility request."
-   [?request <- ::specs/VisibilityRequest (= ?visibilities visibilities)]
-   [::specs/VisibilityResponse (= ?request Request) (= ?visibility visibility) (contains? ?visibilities visibility)]
-   [?Visibility <- ::specs/Visibility]
+   [?request <- ::VisibilityRequest (= ?visibilities visibilities)]
+   [::VisibilityResponse (= ?request Request) (= ?visibility visibility) (contains? ?visibilities visibility)]
+   [?Visibility <- ::Visibility]
    =>
-   (rules/upsert! ::specs/Visibility ?Visibility assoc ::specs/visibility ?visibility)])
+   (rules/upsert! ::Visibility ?Visibility assoc ::visibility ?visibility)])
 
 ;;; Queries
 (defqueries view-queries
   [::visible-todos []
-   [::specs/Visibility (= ?visibility visibility)]
-   [?todo <- ::specs/Todo (condp = ?visibility
+   [::Visibility (= ?visibility visibility)]
+   [?todo <- ::Todo (condp = ?visibility
                             :all true
                             :active (= false done)
                             :completed (= true done))]]
-  [::active-count [] [?count <- (acc/count) :from [::specs/Todo (= false done)]]]
-  [::completed-count [] [?count <- (acc/count) :from [::specs/Todo (= true done)]]])
+  [::active-count [] [?count <- (acc/count) :from [::Todo (= false done)]]]
+  [::completed-count [] [?count <- (acc/count) :from [::Todo (= true done)]]])
 
 (defqueries request-queries
-  [::new-todo-request [] [?request <- ::specs/NewTodoRequest]]
-  [::update-title-request [:?todo] [?request <- ::specs/UpdateTitleRequest (= ?todo Todo)]]
-  [::update-done-request [:?todo] [?request <- ::specs/UpdateDoneRequest (= ?todo Todo)]]
-  [::retract-todo-request [:?todo] [?request <- ::specs/RetractTodoRequest (= ?todo Todo)]]
-  [::complete-all-request [] [?request <- ::specs/CompleteAllRequest]]
-  [::retract-complete-request [] [?request <- ::specs/RetractCompletedRequest]]
-  [::visibility-request [] [?request <- ::specs/VisibilityRequest]])
+  [::new-todo-request [] [?request <- ::NewTodoRequest]]
+  [::update-title-request [:?todo] [?request <- ::UpdateTitleRequest (= ?todo Todo)]]
+  [::update-done-request [:?todo] [?request <- ::UpdateDoneRequest (= ?todo Todo)]]
+  [::retract-todo-request [:?todo] [?request <- ::RetractTodoRequest (= ?todo Todo)]]
+  [::complete-all-request [] [?request <- ::CompleteAllRequest]]
+  [::retract-complete-request [] [?request <- ::RetractCompletedRequest]]
+  [::visibility-request [] [?request <- ::VisibilityRequest]])
 
-(defsession init-session [provisdom.todo.rules/rules
+(defsession init-session [provisdom.todo.common/rules
+                          provisdom.todo.rules/rules
                           provisdom.todo.rules/view-queries
                           provisdom.todo.rules/request-queries])
 
 (def session (-> init-session
-                 (listeners/with-listener listeners/query-listener)
-                 (rules/insert ::specs/Anchor {::specs/time (now)})
+                 (rules/insert ::Anchor {::time (now)})
                  (rules/fire-rules)))
