@@ -1,43 +1,10 @@
-;;; Derived from precept todomvc example: https://github.com/CoNarrative/precept/tree/master/examples/todomvc
-
 (ns provisdom.todo.view
   (:require [rum.core :as rum]
             [provisdom.todo.common :as common]
-            [provisdom.todo.rules :as todo]))
+            [provisdom.todo.rules :as todo]
+            [provisdom.todo.text-input :as input]))
 
 ;;; View components
-(def todo-input-title
-  {:will-mount
-   (fn [{[title] :rum/args :as state}]
-     (let [local-state (atom title)
-           component (:rum/react-component state)]
-       (add-watch local-state :todo-input-title
-                  (fn [_ _ _ _]
-                    (rum/request-render component)))
-       (assoc state :todo-input-title local-state)))})
-
-(rum/defcs todo-input < todo-input-title
-  [state title {:keys [on-stop id class placeholder on-save]}]
-  (let [val (:todo-input-title state)
-        stop #(do (reset! val "")
-                  (if on-stop (on-stop)))
-        save (fn [on-save]
-               (let [v (-> @val str clojure.string/trim)]
-                 (if-not (empty? v) (on-save v))
-                 (stop)))]
-    [:input {:auto-focus  (boolean (not-empty title))
-             :type        "text"
-             :value       @val
-             :id          id
-             :class       class
-             :placeholder placeholder
-             :on-blur     #(save on-save)
-             :on-change   #(reset! val (-> % .-target .-value))
-             :on-key-down #(case (.-keyCode %)
-                             13 (save on-save)
-                             27 (stop)
-                             nil)}]))
-
 (rum/defc stats [session]
   (let [visibility-request (common/query-one :?request session ::todo/visibility-request)
         retract-complete-request (common/query-one :?request session ::todo/retract-complete-request)
@@ -61,36 +28,31 @@
        [:button#clear-completed {:on-click #(common/respond-to retract-complete-request)}
         "Clear completed " completed-count])]))
 
-(rum/defcs item < (rum/local false :edit) [state session todo]
-  (let [edit (:edit state)
-        {::todo/keys [id done title]} todo
-        title-request (common/query-one :?request session ::todo/update-title-request :?todo todo)
+(rum/defc item [session todo]
+  (let [{::todo/keys [id done title]} todo
+        edit-request (common/query-one :?request session ::todo/edit-request :?todo todo)
+        title-input (common/query-one :?input session ::input/input :?id id)
         done-request (common/query-one :?request session ::todo/update-done-request :?todo todo)
         retract-request (common/query-one :?request session ::todo/retract-todo-request :?todo todo)]
     [:li {:class (str (if done "completed ")
-                      (if @edit "editing"))}
+                      (if title-input "editing"))}
      [:div.view
       ;;; Conditionally render controls only if the associated request exists
       (when done-request
         [:input.toggle {:type      "checkbox" :checked done
                         :on-change #(common/respond-to done-request {::todo/done (not done)})}])
-      [:label (when title-request {:on-double-click #(reset! edit true)}) title]
+      [:label (when edit-request {:on-double-click #(common/respond-to edit-request)}) title]
       (when retract-request
         [:button.destroy {:on-click #(common/respond-to retract-request)}])]
-     (when @edit
-       (todo-input title {:id      id
-                          :class   "edit"
-                          :on-save (fn [title] (common/respond-to title-request {::todo/title title}))
-                          :on-stop #(reset! edit false)}))]))
+     (when title-input
+       (input/text-input session id title :class "edit" :auto-focus true))]))
 
 (rum/defc header [session]
   [:header#header
    [:h1 "todos"]
-   (let [new-todo-request (common/query-one :?request session ::todo/new-todo-request)]
+   (let [new-todo-request (common/query-one :?input session ::input/input :?id "new-todo")]
      (when new-todo-request
-       (todo-input "" {:id          "new-todo"
-                       :placeholder "What needs to be done?"
-                       :on-save     (fn [title] (common/respond-to new-todo-request {::todo/Todo (todo/new-todo title)}))})))])
+       (input/text-input session "new-todo" "" :placeholder "What needs to be done?")))])
 
 (rum/defc complete-all [session]
   (let [complete-all-request (common/query-one :?request session ::todo/complete-all-request)]
@@ -119,5 +81,4 @@
       [:p "Double-click to edit a todo"]]]))
 
 (defn ^:export run [session]
-  #_(rum/unmount (js/document.getElementById "app"))
   (rum/mount (app session) (js/document.getElementById "app")))

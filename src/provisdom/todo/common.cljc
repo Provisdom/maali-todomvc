@@ -2,13 +2,15 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as sg]
             [clojure.test.check.generators]
-            [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]))
+            [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
+            [clojure.pprint :refer [pprint]]))
 
+(s/def ::Request (s/keys))
+(s/def ::Response (s/keys :req [::Request]))
 ;;; TODO - add predicate that ensures request conforms to spec?
 (s/def ::response-fn (s/with-gen fn? #(sg/return (fn [_ _]))))
 (s/def ::ResponseFunction (s/keys :req [::response-fn]))
-(s/def ::Request (s/keys :req [::response-fn]))
-(s/def ::Response (s/keys :req [::Request]))
+(def-derive ::RequestWithResponseFn ::Request (s/keys :req [::response-fn]))
 
 ;;; Used to fill in the ::specs/response-fn field in requests. The code which responds
 ;;; to a request can use ::specs/response-fn to provide the response.
@@ -16,8 +18,11 @@
   [response-fn spec response]
   (if (s/valid? spec response)
     (response-fn spec response)
-    (throw (ex-info (str "Invalid response - must conform to spec " spec)
-                    {:response response :spec spec :explanation (s/explain-data spec response)}))))
+    (let [explanation (s/explain-data spec response)]
+      (enable-console-print!)
+      (pprint explanation)
+      (throw (ex-info (str "Invalid response - must conform to spec " spec)
+                      {:response response :spec spec :explanation explanation})))))
 
 ;;; Convenience function to respond to a request
 (defn respond-to
