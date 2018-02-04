@@ -74,8 +74,8 @@
    [::Anchor (= ?time time)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::Visibility {::visibility :all})
-   (rules/insert! ::input/Input (input/new-input "new-todo" true))]
+   (rules/insert-unconditional! ::Visibility {::visibility :all})
+   (rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
 
   [::new-todo-response!
    "Handle a new todo."
