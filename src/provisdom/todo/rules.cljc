@@ -4,16 +4,16 @@
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [clara.rules.accumulators :as acc]
             [provisdom.todo.text-input :as input]
-            [net.cgrand.xforms :as xforms]))
+            [net.cgrand.xforms :as xforms])
+  #?(:clj (:import (java.util UUID))))
 
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
-(s/def ::time nat-int?)
-(s/def ::Anchor (s/keys :req [::time]))
+(s/def ::Anchor (s/keys :req [::common/time]))
 
 (s/def ::id uuid?)
 (s/def ::title string?)
 (s/def ::done boolean?)
-(s/def ::created-at ::time)
+(s/def ::created-at ::common/time)
 (s/def ::Todo (s/keys :req [::id ::title ::done]))
 
 (s/def ::visibility #{:all :active :completed})
@@ -59,12 +59,10 @@
     (drop 1)))                                              ;;; drop the initial nil value
 
 ;;; Convenience function to create new ::Todo facts
-(defn now [] #?(:clj (System/currentTimeMillis) :cljs (.getTime (js/Date.))))
-
 (defn new-todo
-  ([title] (new-todo title (now)))
+  ([title] (new-todo title (common/now)))
   ([title time]
-   {::id (random-uuid) ::title title ::done false ::created-at time}))
+   {::id #?(:clj (UUID/randomUUID) :cljs (random-uuid)) ::title title ::done false ::created-at time}))
 
 ;;; Rules
 (defrules rules
@@ -74,17 +72,22 @@
    [::Anchor (= ?time time)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::Visibility {::visibility :all})
-   (rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
+   (rules/insert-unconditional! ::Visibility {::visibility :all})]
+
+  [::new-todo-request!
+   [:not [::input/Input (= "new-todo" id)]]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
+   =>
+   (rules/insert-unconditional! ::input/Input {::input/id "new-todo" ::common/response-fn (common/response ?response-fn ::input/InputResponse)})]
 
   [::new-todo-response!
    "Handle a new todo."
    [?request <- ::input/Input (= "new-todo" id)]
-   [?input-value <- ::input/InputValue (= ?request Request) (= ?title value) (= true committed?)]
+   [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
    (rules/insert-unconditional! ::Todo (new-todo ?title))
    (rules/retract! ::input/Input ?request)
-   (rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
+   #_(rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
 
   [::update-request!
    "When visibility changes or a new todo is inserted, conditionally insert
@@ -92,23 +95,23 @@
    [?todo <- ::Todo]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::EditRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::common/Response)})
-   (rules/insert! ::UpdateDoneRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::UpdateDoneResponse)})
-   (rules/insert! ::RetractTodoRequest {::Todo ?todo ::common/response-fn (partial common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::EditRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::common/Response)})
+   (rules/insert! ::UpdateDoneRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::UpdateDoneResponse)})
+   (rules/insert! ::RetractTodoRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::common/Response)})]
 
   [::edit-todo-response!
    [?request <- ::EditRequest (= ?todo Todo)]
    [::common/Response (= ?request Request)]
    [?todo <- ::Todo]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::input/Input (input/new-input (::id ?todo)))]
+   (rules/insert! ::input/Input {::input/id ?todo ::common/response-fn (common/response ?response-fn ::input/InputResponse)})]
 
   [::update-title-response!
    "Update the title when the edit value is committed."
-   [?request <- ::input/Input (= ?id id)]
-   [::input/InputValue (= ?request Request) (= ?title value) (= true committed?)]
-   [?todo <- ::Todo (= ?old-title title) (= ?id id)]
-   [:test (not= ?title ?old-title)]
+   [?request <- ::input/Input (= ?todo id)]
+   [::input/InputResponse (= ?request Request) (= ?title value)]
+   [?todo <- ::Todo]
    =>
    (rules/upsert! ::Todo ?todo assoc ::title ?title)]
 
@@ -134,7 +137,7 @@
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert! ::CompleteAllRequest {::done               (not= 0 (count (?todos false)))
-                                        ::common/response-fn (partial common/response ?response-fn ::common/Response)})]
+                                        ::common/response-fn (common/response ?response-fn ::common/Response)})]
 
   [::complete-all-response!
    "Handle response to complete all request."
@@ -150,7 +153,7 @@
    [:test (not-empty ?todos)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::RetractCompletedRequest {::common/response-fn (partial common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::RetractCompletedRequest {::common/response-fn (common/response ?response-fn ::common/Response)})]
 
   [::retract-completed-response!
    "Handle response to retract completed request."
@@ -173,7 +176,7 @@
                               (not= 0 (count (?todos false))) (conj :active))]
      (rules/insert! ::VisibilityRequest {::visibility         ?visibility
                                          ::visibilities       visibilities
-                                         ::common/response-fn (partial common/response ?response-fn ::VisibilityResponse)}))]
+                                         ::common/response-fn (common/response ?response-fn ::VisibilityResponse)}))]
 
   [::visibility-response!
    "Handle response to visibility request."
@@ -211,5 +214,5 @@
                           provisdom.todo.rules/request-queries])
 
 (def session (-> init-session
-                 (rules/insert ::Anchor {::time (now)})
+                 (rules/insert ::Anchor {::common/time (common/now)})
                  (rules/fire-rules)))

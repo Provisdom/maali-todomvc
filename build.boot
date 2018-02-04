@@ -15,10 +15,11 @@
                   [powerlaces/boot-cljs-devtools "0.2.0" :scope "test"]
 
                   [org.clojure/spec.alpha "0.1.143"]
-                  [net.cgrand/xforms "0.15.0"]
-                  [org.clojure/test.check "0.9.0"]
-                  [rum "0.11.0"]
                   [org.clojure/core.async "0.3.465"]
+                  [org.clojure/test.check "0.9.0"]
+                  [io.replikativ/hasch "0.3.4"]
+                  [net.cgrand/xforms "0.15.0"]
+                  [rum "0.11.0"]
                   [provisdom/maali "0.0.1-SNAPSHOT"]])
 
 (require

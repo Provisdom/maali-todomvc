@@ -2,7 +2,8 @@
   (:require [rum.core :as rum]
             [provisdom.todo.common :as common]
             [provisdom.todo.rules :as todo]
-            [provisdom.todo.text-input :as input]))
+            [provisdom.todo.text-input :as input]
+            [provisdom.maali.rules :as rules]))
 
 ;;; View components
 (rum/defc stats [session]
@@ -31,7 +32,7 @@
 (rum/defc item [session todo]
   (let [{::todo/keys [id done title]} todo
         edit-request (common/query-one :?request session ::todo/edit-request :?todo todo)
-        title-input (common/query-one :?input session ::input/input :?id id)
+        title-input (common/query-one :?input session ::input/input :?id todo)
         done-request (common/query-one :?request session ::todo/update-done-request :?todo todo)
         retract-request (common/query-one :?request session ::todo/retract-todo-request :?todo todo)]
     [:li {:class (str (if done "completed ")

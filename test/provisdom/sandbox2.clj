@@ -1,52 +1,30 @@
 (ns provisdom.sandbox2
   (:require [clojure.spec.alpha :as s]
-            [clojure.core.async :as async]
-            [provisdom.todo.specs :as specs]
-            [provisdom.maali.rules :refer [defrules defqueries defsession] :as rules]
-            [clara.rules.accumulators :as acc]
-            [provisdom.maali.listeners :as listeners]
-            [provisdom.maali.tracing :as tracing]
-            [net.cgrand.xforms :as xforms]))
+            [provisdom.maali.rules :refer [defrules defqueries defsession] :as rules]))
 
 (s/def ::foo int?)
+(s/def ::bar string?)
 (s/def ::fact (s/keys :req [::foo]))
+(s/def ::child-fact ::fact)
+(derive ::child-fact ::fact)
+(s/def ::grandchild-fact (s/merge ::child-fact (s/keys :req [::bar])))
+(derive ::grandchild-fact ::child-fact)
 
 (defrules roolz
           [::foo!
-           [?foo <- ::fact]
+           [?fact <- ::fact]
            =>
-           (println "FOO" ?foo)])
+           (println "RETRACT" ?fact)
+           (rules/retract! ::fact ?fact)])
 
-(defsession session [provisdom.sandbox2/roolz])
+(defqueries qs
+  [::fact [] [?fact <- ::fact]])
 
-(-> session
-    (rules/insert ::fact {::foo 1})
-    (rules/fire-rules))
+(defsession session [provisdom.sandbox2/roolz provisdom.sandbox2/qs])
 
-(clojure.pprint/pprint (-> (clara.rules.engine/components session) :rulebase :alpha-roots))
-(clojure.pprint/pprint (-> (clara.rules.engine/components session) :rulebase :beta-roots))
-(clojure.pprint/pprint (-> (clara.rules.engine/components session) :rulebase :productions))
 
-(clojure.pprint/pprint roolz)
 
-(clara.rules/defrule foo!
-                     [?foo <- ::fact]
-                     =>
-                     (println "FOO" ?foo))
-
-(clara.rules/defsession session2 'provisdom.sandbox2 :fact-type-fn rules/spec-type)
-
-(-> session2
-    (rules/insert ::fact {::foo 1})
-    (clara.rules/fire-rules))
-
-(clojure.pprint/pprint (-> (clara.rules.engine/components session2) :rulebase :alpha-roots))
-(clojure.pprint/pprint (-> (clara.rules.engine/components session2) :rulebase :beta-roots))
-
-(def session3 (clara.rules.compiler/mk-session [[(::foo! roolz)] :fact-type-fn rules/spec-type]))
-
-(-> session2
-    (rules/insert ::fact {::foo 1})
-    (clara.rules/fire-rules))
-
-(clojure.pprint/pprint (:rulebase (clara.rules.engine/components session3)))
+(println (rules/query (-> session
+                          (rules/insert ::grandchild-fact {::foo 1 ::bar "1"})
+                          (rules/fire-rules))
+                      ::fact))
