@@ -74,8 +74,8 @@
    [::Anchor (= ?time time)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::Visibility {::visibility :all})
-   (rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
+   (rules/insert! ::Visibility {::visibility :all})
+   (rules/insert! ::input/Input (input/new-input "new-todo" true))]
 
   [::new-todo-response!
    "Handle a new todo."
@@ -110,7 +110,6 @@
    [?todo <- ::Todo (= ?old-title title) (= ?id id)]
    [:test (not= ?title ?old-title)]
    =>
-   (enable-console-print!) (println "FOOO")
    (rules/upsert! ::Todo ?todo assoc ::title ?title)]
 
   [::update-done-response!

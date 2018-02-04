@@ -55,7 +55,7 @@
    [::ValueResponse (= ?request Request) (= ?value value)]
    [?input-value <- ::InputValue (= ?input Request)]
    =>
-   (rules/upsert! ::InputValue ?input-value assoc ::value ?value)]
+   (rules/upsert! ::InputValue ?input-value assoc ::value ?value ::committed? false)]
 
   [::commit-response!
    [?request <- ::CommitRequest (= ?input Input)]
@@ -83,15 +83,14 @@
 
 (def init-text-input
   {:will-mount
-   (fn [{[session id initial-value] :rum/args :as state}]
-     (let [value-request (common/query-one :?request session ::value-request :?id id)]
+   (fn [{[session input initial-value] :rum/args :as state}]
+     (let [value-request (common/query-one :?request session ::value-request :?input input)]
        (if value-request (common/respond-to value-request {::value initial-value}))
        state))})
 
 (rum/defc text-input < init-text-input
-          [session id initial-value & attrs]
+          [session input initial-value & attrs]
           (let [attrs-map (into {} (map vec (partition 2 attrs)))
-                input (common/query-one :?input session ::input :?id id)
                 cancel-request (common/query-one :?request session ::cancel-request :?input input)
                 commit-request (common/query-one :?request session ::commit-request :?input input)
                 value-request (common/query-one :?request session ::value-request :?input input)
@@ -100,7 +99,7 @@
               [:input (merge attrs-map
                              {:type        "text"
                               :value       value
-                              :id          id
+                              :id          (::id input)
                               :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
                               :on-blur     #(when commit-request (common/respond-to commit-request))
                               :on-key-down #(let [key-code (.-keyCode %)]
