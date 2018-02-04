@@ -56,6 +56,9 @@
 
 (defrules rules
   [::cancel-request!
+   "Cancellation is a special response that always causes the corresponding
+    request to be retracted. Note that the ::retract-orphan-response! rule
+    below will then cause the cancellation fact to also be retracted."
    [?request <- ::Request]
    [::Cancellation (= ?request Request)]
    =>

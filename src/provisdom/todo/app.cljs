@@ -22,20 +22,14 @@
 (def *test* nil)
 
 (defn init []
-  #_(reset! view/session-atom (rules/fire-rules session))
-
   (let [session-ch (async/chan 10 todo/handle-response-xf)
-        response-ch (async/chan 10)
         response-fn (fn [spec response]
-                      (async/put! response-ch [spec response]))
+                      (async/put! session-ch [spec response]))
         session (-> (apply rules/insert todo/session ::todo/Todo todos)
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
                     (rules/fire-rules))]
     ;;; Initialize with the session.
     (async/put! session-ch [nil session])
-
-    ;;; Connect the response channel to the processing pipeline.
-    (async/pipe response-ch session-ch)
 
     (condp = *test*
       :sync (test/abuse session-ch 1000 20)
