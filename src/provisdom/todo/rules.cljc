@@ -19,18 +19,18 @@
 (s/def ::visibility #{:all :active :completed})
 (s/def ::Visibility (s/keys :req [::visibility]))
 
-(def-derive ::UpdateTodoRequest ::common/RequestWithResponseFn (s/merge ::common/RequestWithResponseFn (s/keys :req [::Todo])))
+(def-derive ::UpdateTodoRequest ::common/RequestWithResponseFn (s/keys :req [::Todo]))
 (def-derive ::UpdateTitleRequest ::UpdateTodoRequest)
-(def-derive ::UpdateTitleResponse ::common/Response (s/merge ::common/Response (s/keys :req [::title])))
+(def-derive ::UpdateTitleResponse ::common/Response (s/keys :req [::title]))
 (def-derive ::UpdateDoneRequest ::UpdateTodoRequest)
-(def-derive ::UpdateDoneResponse ::common/Response (s/merge ::common/Response (s/keys :req [::done])))
+(def-derive ::UpdateDoneResponse ::common/Response (s/keys :req [::done]))
 (def-derive ::RetractTodoRequest ::UpdateTodoRequest)
-(def-derive ::CompleteAllRequest ::common/RequestWithResponseFn (s/merge ::common/RequestWithResponseFn (s/keys :req [::done])))
+(def-derive ::CompleteAllRequest ::common/RequestWithResponseFn (s/keys :req [::done]))
 (def-derive ::RetractCompletedRequest ::common/RequestWithResponseFn)
 (s/def ::visibilities (s/coll-of ::visibility :kind set?))
-(def-derive ::VisibilityRequest ::common/RequestWithResponseFn (s/merge ::common/RequestWithResponseFn (s/keys :req [::visibilities])))
-(def-derive ::VisibilityResponse ::common/Response (s/merge ::common/Response (s/keys :req [::visibility])))
-(def-derive ::EditRequest ::common/RequestWithResponseFn (s/merge ::common/RequestWithResponseFn (s/keys :req [::Todo])))
+(def-derive ::VisibilityRequest ::common/RequestWithResponseFn (s/keys :req [::visibilities]))
+(def-derive ::VisibilityResponse ::common/Response (s/keys :req [::visibility]))
+(def-derive ::EditRequest ::common/RequestWithResponseFn (s/keys :req [::Todo]))
 
 
 (def request->response

@@ -9,14 +9,15 @@
 (s/def ::value string?)
 (s/def ::persistent? boolean?)
 (s/def ::committed? boolean?)
-(def-derive ::Input ::common/RequestWithResponseFn (s/merge ::common/RequestWithResponseFn (s/keys :req [::id])))
-(def-derive ::InputValue ::common/Response (s/merge ::common/Response (s/keys :req [::value])))
+(def-derive ::Input ::common/RequestWithResponseFn (s/keys :req [::id]))
+(derive ::Input ::common/Cancellable)
+(def-derive ::InputValue ::common/Response (s/keys :req [::value]))
 (def-derive ::InputResponse ::InputValue)
 
-(def-derive ::InputRequest ::common/Request (s/merge ::common/RequestWithResponseFn (s/keys :req [::Input])))
+(def-derive ::InputRequest ::common/Request (s/keys :req [::Input]))
 (def-derive ::CommitRequest ::InputRequest)
 (def-derive ::ValueRequest ::InputRequest)
-(def-derive ::ValueResponse ::common/Response (s/merge ::common/Response (s/keys :req [::value])))
+(def-derive ::ValueResponse ::common/Response (s/keys :req [::value]))
 
 (def request->response
   {::CommitRequest ::common/Response
@@ -31,7 +32,6 @@
   ([id persistent?]
    {::id id ::persistent? persistent? :__token (common/now)}))
 
-;;; TODO - decouple value state from input
 (defrules rules
   [::input!
    [?input <- ::Input]
@@ -71,8 +71,7 @@
   [::commit-request [:?input] [?request <- ::CommitRequest (= ?input Input)]]
   [::value-request [:?input] [?request <- ::ValueRequest (= ?input Input)]]
   [::value [:?input] [::InputValue (= ?input Request) (= ?value value) ]]
-  [::input [:?id] [?input <- ::Input (= ?id id)]]
-  [::inputs [] [?input <- ::Input]])
+  [::input [:?id] [?input <- ::Input (= ?id id)]])
 
 (def init-text-input
   {:will-mount

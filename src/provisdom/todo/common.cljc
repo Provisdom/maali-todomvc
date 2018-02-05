@@ -7,6 +7,7 @@
 
 (s/def ::Request (s/keys))
 (s/def ::Response (s/keys :req [::Request]))
+(def-derive ::Cancellable ::Request)
 (def-derive ::Cancellation ::Response)
 ;;; TODO - add predicate that ensures request conforms to spec?
 (s/def ::response-fn (s/with-gen fn? #(sg/return (fn [_ _]))))
@@ -59,7 +60,7 @@
    "Cancellation is a special response that always causes the corresponding
     request to be retracted. Note that the ::retract-orphan-response! rule
     below will then cause the cancellation fact to also be retracted."
-   [?request <- ::Request]
+   [?request <- ::Cancellable]
    [::Cancellation (= ?request Request)]
    =>
    (rules/retract! (rules/spec-type ?request) ?request)]
