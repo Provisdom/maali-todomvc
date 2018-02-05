@@ -20,7 +20,6 @@
 (s/def ::Visibility (s/keys :req [::visibility]))
 
 (def-derive ::UpdateTodoRequest ::common/RequestWithResponseFn (s/keys :req [::Todo]))
-(def-derive ::UpdateTitleRequest ::UpdateTodoRequest)
 (def-derive ::UpdateTitleResponse ::common/Response (s/keys :req [::title]))
 (def-derive ::UpdateDoneRequest ::UpdateTodoRequest)
 (def-derive ::UpdateDoneResponse ::common/Response (s/keys :req [::done]))
@@ -35,7 +34,6 @@
 
 (def request->response
   {::EditRequest             ::common/Response
-   ::UpdateTitleRequest      ::UpdateTitleResponse
    ::UpdateDoneRequest       ::UpdateDoneResponse
    ::RetractTodoRequest      ::common/Response
    ::CompleteAllRequest      ::common/Response
@@ -70,11 +68,12 @@
    "Initialize visibility and the request for a new todo. Both are singletons
     so insert unconditionally here."
    [::Anchor (= ?time time)]
-   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert-unconditional! ::Visibility {::visibility :all})]
 
   [::new-todo-request!
+   "Always want to allow a new todo to be entered, so if the input does not
+    exist, insert it."
    [:not [::input/Input (= "new-todo" id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
@@ -86,8 +85,9 @@
    [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
    (rules/insert-unconditional! ::Todo (new-todo ?title))
-   (rules/retract! ::input/Input ?request)
-   #_(rules/insert-unconditional! ::input/Input (input/new-input "new-todo" true))]
+   ;;; Input state is initialized by inserting a new input, so just retract the old one
+   ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
+   (rules/retract! ::input/Input ?request)]
 
   [::update-request!
    "When visibility changes or a new todo is inserted, conditionally insert
@@ -100,6 +100,7 @@
    (rules/insert! ::RetractTodoRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::common/Response)})]
 
   [::edit-todo-response!
+   "Make an Input when the user chooses to edit a todo."
    [?request <- ::EditRequest (= ?todo Todo)]
    [::common/Response (= ?request Request)]
    [?todo <- ::Todo]
@@ -199,7 +200,6 @@
 
 (defqueries request-queries
   [::edit-request [:?todo] [?request <- ::EditRequest (= ?todo Todo)]]
-  [::update-title-request [:?todo] [?request <- ::UpdateTitleRequest (= ?todo Todo)]]
   [::update-done-request [:?todo] [?request <- ::UpdateDoneRequest (= ?todo Todo)]]
   [::retract-todo-request [:?todo] [?request <- ::RetractTodoRequest (= ?todo Todo)]]
   [::complete-all-request [] [?request <- ::CompleteAllRequest]]
@@ -208,7 +208,8 @@
 
 (defsession init-session [provisdom.todo.common/rules
                           provisdom.todo.text-input/rules
-                          provisdom.todo.text-input/queries
+                          provisdom.todo.text-input/request-queries
+                          provisdom.todo.text-input/view-queries
                           provisdom.todo.rules/rules
                           provisdom.todo.rules/view-queries
                           provisdom.todo.rules/request-queries])

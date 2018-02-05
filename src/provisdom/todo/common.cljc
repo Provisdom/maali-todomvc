@@ -17,9 +17,14 @@
 (s/def ::time nat-int?)
 (defn now [] #?(:clj (System/currentTimeMillis) :cljs (.getTime (js/Date.))))
 
-;;; Used to fill in the ::specs/response-fn field in requests. The code which responds
-;;; to a request can use ::specs/response-fn to provide the response.
+;;; Used to fill in the ::specs/response-fn field in requests.
 (defn response
+  "Given a response-fn and a spec, return a function that calls response-fn
+   with a supplied response and the captured spec. This makes it convenient
+   for consumers of requests to simply provide a response without having to
+   map the request spec to the response spec. response-fn accepts a spec
+   and a response map. Also handles special cases like cancellation by
+   looking for specific spec types in the response metadata."
   [response-fn spec]
   (fn [response]
     (condp = (rules/spec-type response)
@@ -29,6 +34,7 @@
       (if (s/valid? spec response)
         (response-fn spec response)
         (let [explanation (s/explain-data spec response)]
+          ;;; Pretty-print the explanation here so it is readable in the browser
           #?(:cljs (enable-console-print!))
           (pprint explanation)
           (throw (ex-info (str "Invalid response - must conform to spec " spec)
@@ -38,13 +44,12 @@
 (defn respond-to
   ([request] (respond-to request {}))
   ([request response]
-   (let [response-fn (::response-fn request)]
-     (response-fn (merge {::Request request} response)))))
+   ((::response-fn request) (merge {::Request request} response))))
 
+;;; Convenience function to cancel a request
 (defn cancel-request
   [request]
-  (let [response-fn (::response-fn request)]
-    (response-fn (rules/spec-type {::Request request} ::Cancellation))))
+  ((::response-fn request) (rules/spec-type {::Request request} ::Cancellation)))
 
 ;;; Some query boilerplate functions
 (defn query-many
@@ -55,6 +60,7 @@
   [map-fn session query & args]
   (-> (apply rules/query session query args) first map-fn))
 
+;;; Common rules for request/response logic.
 (defrules rules
   [::cancel-request!
    "Cancellation is a special response that always causes the corresponding
