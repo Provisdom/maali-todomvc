@@ -19,7 +19,7 @@
             (todo/new-todo "Make all rendering async" 3)
             (todo/new-todo "Allow any arguments to component functions" 4)])
 
-(defsession session [provisdom.todo.common/rules
+(defsession init-session [provisdom.todo.common/rules
                      provisdom.todo.text-input/rules
                      provisdom.todo.text-input/view-queries
                      provisdom.todo.text-input/request-queries
@@ -30,19 +30,16 @@
 (def *test* :sync)
 (defn init []
   (condp = *test*
-    :sync (test/abuse 10 200)
+    :sync (test/abuse 1000 20)
     :async (test/abuse-async 10 20 3)
 
-    (let [session-ch (async/chan 10 todo/handle-response-xf)
+    (let [session-atom (atom init-session)
           response-fn (fn [spec response]
-                        (async/put! session-ch [spec response]))
-          session (-> (apply rules/insert session ::todo/Todo todos)
+                        (swap! session-atom todo/handle-response [spec response]))
+          session (-> (apply rules/insert init-session ::todo/Todo todos)
                       (rules/insert ::todo/Anchor {::common/time (common/now)})
                       (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
                       (rules/fire-rules))]
       ;;; Initialize with the session.
-      (async/put! session-ch [nil session])
-      (async/go-loop []
-        (when-some [s (<! session-ch)]
-          (view/run s)
-          (recur))))))
+      (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
+      (reset! session-atom session))))

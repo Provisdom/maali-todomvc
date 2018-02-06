@@ -30,7 +30,6 @@
    [?input <- ::Input]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (enable-console-print!) (println ::input!)
    (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ""}))]
 
   [::comittable-input!
@@ -47,27 +46,26 @@
    [?input <- ::Input]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (let [req (common/request {::Input ?input} ::ValueResponse ?response-fn)]
-     (enable-console-print!) (println ::value-request! (::value ?input-value) req)
-     (rules/insert! ::ValueRequest req))]
+   (rules/insert! ::ValueRequest (common/request {::Input ?input} ::ValueResponse ?response-fn))]
 
   [::value-response!
    "Handle the response to ValueRequest, update InputValue."
+   [?input <- ::Input]
    [?request <- ::ValueRequest (= ?input Input)]
    [::ValueResponse (= ?request Request) (= ?value value)]
    [?input-value <- ::InputValue (= ?input Request)]
    =>
-   (enable-console-print!) (println ::value-response! ?value)
    (rules/upsert! ::InputValue ?input-value assoc ::value ?value)]
 
   [::commit-response!
    "Handle response to CommitRequest, insert InputResponse to signal
     the value has been committed."
+   [?input <- ::Input]
    [?request <- ::CommitRequest (= ?input Input)]
    [::common/Response (= ?request Request)]
    [?input-value <- ::InputValue (= ?value value) (= ?input Request)]
    =>
-   (rules/insert! ::InputResponse ?input-value)])
+   (rules/insert! ::InputResponse {::common/Request ?input ::value ?value})])
 
 ;;; Queries
 (defqueries request-queries

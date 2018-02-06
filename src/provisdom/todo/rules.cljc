@@ -2,6 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [provisdom.todo.common :as common]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
+            [provisdom.maali.tracing :as tracing]
+            [clara.tools.inspect :as inspect]
             [clara.rules.accumulators :as acc]
             [provisdom.todo.text-input :as input]
             [net.cgrand.xforms :as xforms])
@@ -37,8 +39,11 @@
   [session [spec response]]
   (if session
     (-> session
+        #_(tracing/with-tracing)
         (rules/insert spec response)
-        (rules/fire-rules))
+        (rules/fire-rules)
+        #_(tracing/print-trace)
+        )
     response))
 
 ;;; Transducer which takes in responses and provides reductions over the handle-response function,
@@ -69,7 +74,6 @@
    [:not [::input/Input (= "new-todo" id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (enable-console-print!) (println ::new-todo-request!)
    (rules/insert-unconditional! ::input/Input (common/request {::input/id "new-todo"} ::input/InputResponse ?response-fn))]
 
   [::new-todo-response!
@@ -77,7 +81,6 @@
    [?request <- ::input/Input (= "new-todo" id)]
    [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
-   (enable-console-print!) (println ::new-todo-response!)
    (rules/insert-unconditional! ::Todo (new-todo ?title))
    ;;; Input state is initialized by inserting a new input, so just retract the old one
    ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
@@ -108,7 +111,7 @@
    [::input/InputResponse (= ?request Request) (= ?title value)]
    [?todo <- ::Todo]
    =>
-   (rules/upsert! ::Todo ?todo assoc ::title ?title)]
+   (rules/upsert! ::Todo ?todo assoc ::title ?title ::common/time (common/now))]
 
   [::update-done-response!
    "Handle response to a one update request."

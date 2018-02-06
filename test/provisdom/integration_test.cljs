@@ -4,6 +4,7 @@
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
             [provisdom.maali.rules :refer-macros [defqueries defsession] :as rules]
+            [clara.tools.inspect :as inspect]
             [cljs.core.async :refer [<! >!] :as async]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as sg]
@@ -22,11 +23,11 @@
 
 (def query-pdf
   {::inputs                   20
-   ;::edit-requests            20
-   ::update-done-requests     5
-   ::retract-todo-requests    1
+   ::edit-requests            5
+   ::update-done-requests     10
+   ::retract-todo-requests    3
    ::complete-all-request     1
-   ::retract-complete-request 0.1
+   ::retract-complete-request 1
    ::visibility-request       5})
 
 (def query-cdf
@@ -65,24 +66,20 @@
    ::todo/VisibilityRequest       ::todo/VisibilityResponse})
 
 (defn input-responses
-  [session session-ch input delay-ms]
+  [session-atom input delay-ms]
   (async/go
     (let [value (sg/generate (s/gen ::input/value))
-          values (reductions #(str %1 %2) (first value) (rest value))
-          session (loop [session session
-                         [value & values] values]
-                    (view/run session)
-                    (if value
-                      (let [value-request (common/query-one :?request session ::input/value-request :?input input)]
-                        (enable-console-print!) (println "RESPOND WITH" value)
-                        (common/respond-to value-request {::input/value value})
-                        (<! (async/timeout (* 0.1 delay-ms)))
-                        (recur (<! session-ch) values))
-                      session))]
-      (let [commit-request (common/query-one :?request session ::input/commit-request :?input input)]
+          values (reductions #(str %1 %2) (first value) (rest value))]
+      (loop [[value & values] values]
+        (if value
+          (let [value-request (common/query-one :?request @session-atom ::input/value-request :?input input)]
+            (common/respond-to value-request {::input/value value})
+            (<! (async/timeout (* 0.1 delay-ms)))
+            (recur values))))
+      (let [commit-request (common/query-one :?request @session-atom ::input/commit-request :?input input)]
         (if (and commit-request (< (rand) 0.9))
-          (do (println "COMMIT") (common/respond-to commit-request))
-          (do (println "CANCEL") (common/cancel-request input)))))
+          (common/respond-to commit-request)
+          (common/cancel-request input))))
     true))
 
 (defn gen-response
@@ -102,44 +99,34 @@
 
 (defn abuse
   [iterations delay-ms]
-  (let [session-ch (async/chan 10 todo/handle-response-xf)
+  (let [session-atom (atom init-session)
         response-fn (fn [spec response]
-                      (async/put! session-ch [spec response]))
+                      (swap! session-atom todo/handle-response [spec response])
+                      #_(inspect/explain-activations @session-atom))
         session (-> (apply rules/insert init-session ::todo/Todo todos)
                     (rules/insert ::todo/Anchor {::common/time (common/now)})
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
                     (rules/fire-rules))]
-    (async/put! session-ch [nil session])
-    (async/go-loop [session session
-                    i 0]
-      (enable-console-print!)
-      (when (< i iterations)
-        (view/run session)
-        (let [request (select-request session)]
-          (condp = (rules/spec-type request)
-            ::input/Input
-            (let [input request
-                  value (sg/generate (s/gen ::input/value))
-                  values (reductions #(str %1 %2) (first value) (rest value))
-                  session (loop [session session
-                                 [value & values] values]
-                            (view/run session)
-                            (if value
-                              (let [value-request (common/query-one :?request session ::input/value-request :?input input)]
-                                (enable-console-print!) (println "RESPOND WITH" value) (println (rules/query session ::value-request))
-                                (common/respond-to value-request {::input/value value})
-                                (<! (async/timeout (* 1.0 delay-ms)))
-                                (recur (<! session-ch) values))
-                              session))]
-              (let [commit-request (common/query-one :?request session ::input/commit-request :?input input)]
-                (if (and commit-request (< (rand) 0.9))
-                  (do (println "COMMIT") (common/respond-to commit-request))
-                  (do (println "CANCEL") (common/cancel-request input)))))
-            #_(<! (input-responses session session-ch request delay-ms))
+    (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
+    (reset! session-atom session)
+    (async/go
+      (loop [i 0]
+        (enable-console-print!)
+        (when (< i iterations)
+          (let [request (select-request @session-atom)]
+            (condp = (rules/spec-type request)
+              ::input/Input
+              (<! (input-responses session-atom request delay-ms))
 
-            (common/respond-to request (gen-response request))))
-        (<! (async/timeout delay-ms))
-        (recur (<! session-ch) (inc i)))
+              ::todo/EditRequest
+              (do
+                (common/respond-to request (gen-response request))
+                (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                  (<! (input-responses session-atom input delay-ms))))
+
+              (common/respond-to request (gen-response request)))
+            (<! (async/timeout delay-ms))
+            (recur (inc i)))))
       (println "DONE!"))))
 
 
