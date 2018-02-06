@@ -32,7 +32,7 @@
 (rum/defc item [session todo]
   (let [{::todo/keys [id done title]} todo
         edit-request (common/query-one :?request session ::todo/edit-request :?todo todo)
-        title-input (common/query-one :?input session ::input/input :?id todo)
+        title-input (common/query-one :?request session ::todo/input :?id todo)
         done-request (common/query-one :?request session ::todo/update-done-request :?todo todo)
         retract-request (common/query-one :?request session ::todo/retract-todo-request :?todo todo)]
     [:li {:class (str (if done "completed ")
@@ -51,7 +51,7 @@
 (rum/defc header [session]
   [:header#header
    [:h1 "todos"]
-   (let [new-todo-input (common/query-one :?input session ::input/input :?id "new-todo")]
+   (let [new-todo-input (common/query-one :?request session ::todo/input :?id "new-todo")]
      (when new-todo-input
        (input/text-input session new-todo-input "" :placeholder "What needs to be done?")))])
 

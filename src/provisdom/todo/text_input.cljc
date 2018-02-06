@@ -9,7 +9,7 @@
 (s/def ::value string?)
 (s/def ::persistent? boolean?)
 (s/def ::committed? boolean?)
-(def-derive ::Input ::common/RequestWithResponseFn (s/keys :req [::id]))
+(def-derive ::Input ::common/Request (s/keys :req [::id]))
 (derive ::Input ::common/Cancellable)
 (def-derive ::InputValue ::common/Response (s/keys :req [::value]))
 (def-derive ::InputResponse ::InputValue)
@@ -30,7 +30,8 @@
    [?input <- ::Input]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::InputValue {::common/Request ?input ::value ""})]
+   (enable-console-print!) (println ::input!)
+   (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ""}))]
 
   [::comittable-input!
    "If the value of the Input is not empty, it is legal to commit the value."
@@ -38,7 +39,7 @@
    [::InputValue (= ?input Request) (not-empty value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::CommitRequest {::Input ?input ::common/response-fn (common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::CommitRequest (common/request {::Input ?input} ::common/Response ?response-fn))]
 
   [::value-request!
    "Request an new value for the Input."
@@ -46,7 +47,9 @@
    [?input <- ::Input]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::ValueRequest {::Input ?input ::common/response-fn (common/response ?response-fn ::ValueResponse)})]
+   (let [req (common/request {::Input ?input} ::ValueResponse ?response-fn)]
+     (enable-console-print!) (println ::value-request! (::value ?input-value) req)
+     (rules/insert! ::ValueRequest req))]
 
   [::value-response!
    "Handle the response to ValueRequest, update InputValue."
@@ -54,6 +57,7 @@
    [::ValueResponse (= ?request Request) (= ?value value)]
    [?input-value <- ::InputValue (= ?input Request)]
    =>
+   (enable-console-print!) (println ::value-response! ?value)
    (rules/upsert! ::InputValue ?input-value assoc ::value ?value)]
 
   [::commit-response!
@@ -68,12 +72,15 @@
 ;;; Queries
 (defqueries request-queries
   [::commit-request [:?input] [?request <- ::CommitRequest (= ?input Input)]]
-  [::value-request [:?input] [?request <- ::ValueRequest (= ?input Input)]]
-  )
+  [::value-request [:?input] [?request <- ::ValueRequest (= ?input Input)]])
 
 (defqueries view-queries
-  [::value [:?input] [::InputValue (= ?input Request) (= ?value value) ]]
-  [::input [:?id] [?input <- ::Input (= ?id id)]])
+  [::value [:?input] [::InputValue (= ?input Request) (= ?value value)]])
+
+(def productions (clojure.set/union common/productions
+                                    #{provisdom.todo.text-input/rules
+                                      provisdom.todo.text-input/request-queries
+                                      provisdom.todo.text-input/view-queries}))
 
 ;;; View
 

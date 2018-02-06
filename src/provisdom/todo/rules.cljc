@@ -5,7 +5,8 @@
             [clara.rules.accumulators :as acc]
             [provisdom.todo.text-input :as input]
             [net.cgrand.xforms :as xforms])
-  #?(:clj (:import (java.util UUID))))
+  #?(:clj
+     (:import (java.util UUID))))
 
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
 (s/def ::Anchor (s/keys :req [::common/time]))
@@ -19,26 +20,17 @@
 (s/def ::visibility #{:all :active :completed})
 (s/def ::Visibility (s/keys :req [::visibility]))
 
-(def-derive ::UpdateTodoRequest ::common/RequestWithResponseFn (s/keys :req [::Todo]))
+(def-derive ::UpdateTodoRequest ::common/Request (s/keys :req [::Todo]))
 (def-derive ::UpdateTitleResponse ::common/Response (s/keys :req [::title]))
 (def-derive ::UpdateDoneRequest ::UpdateTodoRequest)
 (def-derive ::UpdateDoneResponse ::common/Response (s/keys :req [::done]))
 (def-derive ::RetractTodoRequest ::UpdateTodoRequest)
-(def-derive ::CompleteAllRequest ::common/RequestWithResponseFn (s/keys :req [::done]))
-(def-derive ::RetractCompletedRequest ::common/RequestWithResponseFn)
+(def-derive ::CompleteAllRequest ::common/Request (s/keys :req [::done]))
+(def-derive ::RetractCompletedRequest ::common/Request)
 (s/def ::visibilities (s/coll-of ::visibility :kind set?))
-(def-derive ::VisibilityRequest ::common/RequestWithResponseFn (s/keys :req [::visibilities]))
+(def-derive ::VisibilityRequest ::common/Request (s/keys :req [::visibilities]))
 (def-derive ::VisibilityResponse ::common/Response (s/keys :req [::visibility]))
-(def-derive ::EditRequest ::common/RequestWithResponseFn (s/keys :req [::Todo]))
-
-
-(def request->response
-  {::EditRequest             ::common/Response
-   ::UpdateDoneRequest       ::UpdateDoneResponse
-   ::RetractTodoRequest      ::common/Response
-   ::CompleteAllRequest      ::common/Response
-   ::RetractCompletedRequest ::common/Response
-   ::VisibilityRequest       ::VisibilityResponse})
+(def-derive ::EditRequest ::common/Request (s/keys :req [::Todo]))
 
 ;;; Reducing function to produce the new session from a supplied response.
 (defn handle-response
@@ -77,13 +69,15 @@
    [:not [::input/Input (= "new-todo" id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::input/Input {::input/id "new-todo" ::common/response-fn (common/response ?response-fn ::input/InputResponse)})]
+   (enable-console-print!) (println ::new-todo-request!)
+   (rules/insert-unconditional! ::input/Input (common/request {::input/id "new-todo"} ::input/InputResponse ?response-fn))]
 
   [::new-todo-response!
    "Handle a new todo."
    [?request <- ::input/Input (= "new-todo" id)]
    [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
+   (enable-console-print!) (println ::new-todo-response!)
    (rules/insert-unconditional! ::Todo (new-todo ?title))
    ;;; Input state is initialized by inserting a new input, so just retract the old one
    ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
@@ -95,9 +89,9 @@
    [?todo <- ::Todo]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::EditRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::common/Response)})
-   (rules/insert! ::UpdateDoneRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::UpdateDoneResponse)})
-   (rules/insert! ::RetractTodoRequest {::Todo ?todo ::common/response-fn (common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::EditRequest (common/request {::Todo ?todo} ::common/Response ?response-fn))
+   (rules/insert! ::UpdateDoneRequest (common/request {::Todo ?todo} ::UpdateDoneResponse ?response-fn))
+   (rules/insert! ::RetractTodoRequest (common/request {::Todo ?todo} ::common/Response ?response-fn))]
 
   [::edit-todo-response!
    "Make an Input when the user chooses to edit a todo."
@@ -106,7 +100,7 @@
    [?todo <- ::Todo]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::input/Input {::input/id ?todo ::common/response-fn (common/response ?response-fn ::input/InputResponse)})]
+   (rules/insert! ::input/Input (common/request {::input/id ?todo} ::input/InputResponse ?response-fn))]
 
   [::update-title-response!
    "Update the title when the edit value is committed."
@@ -135,10 +129,10 @@
     then the request implies we set them all to done. If all todos are
     done, then the request means we will set them all to not done."
    [?todos <- (acc/grouping-by ::done) :from [::Todo]]
+   [:test (> (count ?todos) 0)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::CompleteAllRequest {::done               (not= 0 (count (?todos false)))
-                                        ::common/response-fn (common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::CompleteAllRequest (common/request {::done (not= 0 (count (?todos false)))} ::common/Response ?response-fn))]
 
   [::complete-all-response!
    "Handle response to complete all request."
@@ -154,7 +148,7 @@
    [:test (not-empty ?todos)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::RetractCompletedRequest {::common/response-fn (common/response ?response-fn ::common/Response)})]
+   (rules/insert! ::RetractCompletedRequest (common/request ::common/Response ?response-fn))]
 
   [::retract-completed-response!
    "Handle response to retract completed request."
@@ -175,9 +169,9 @@
    (let [visibilities (cond-> #{:all}
                               (not= 0 (count (?todos true))) (conj :completed)
                               (not= 0 (count (?todos false))) (conj :active))]
-     (rules/insert! ::VisibilityRequest {::visibility         ?visibility
-                                         ::visibilities       visibilities
-                                         ::common/response-fn (common/response ?response-fn ::VisibilityResponse)}))]
+     (rules/insert! ::VisibilityRequest (common/request {::visibility   ?visibility
+                                                         ::visibilities visibilities}
+                                                        ::VisibilityResponse ?response-fn)))]
 
   [::visibility-response!
    "Handle response to visibility request."
@@ -199,6 +193,7 @@
   [::completed-count [] [?count <- (acc/count) :from [::Todo (= true done)]]])
 
 (defqueries request-queries
+  [::input [:?id] [?request <- ::input/Input (= ?id id)]]
   [::edit-request [:?todo] [?request <- ::EditRequest (= ?todo Todo)]]
   [::update-done-request [:?todo] [?request <- ::UpdateDoneRequest (= ?todo Todo)]]
   [::retract-todo-request [:?todo] [?request <- ::RetractTodoRequest (= ?todo Todo)]]
@@ -206,14 +201,8 @@
   [::retract-complete-request [] [?request <- ::RetractCompletedRequest]]
   [::visibility-request [] [?request <- ::VisibilityRequest]])
 
-(defsession init-session [provisdom.todo.common/rules
-                          provisdom.todo.text-input/rules
-                          provisdom.todo.text-input/request-queries
-                          provisdom.todo.text-input/view-queries
-                          provisdom.todo.rules/rules
-                          provisdom.todo.rules/view-queries
-                          provisdom.todo.rules/request-queries])
-
-(def session (-> init-session
-                 (rules/insert ::Anchor {::common/time (common/now)})
-                 (rules/fire-rules)))
+(def productions (clojure.set/union common/productions
+                                    input/productions
+                                    #{provisdom.todo.rules/rules
+                                      provisdom.todo.rules/view-queries
+                                      provisdom.todo.rules/request-queries}))
