@@ -11,20 +11,18 @@
             [cljs.pprint :refer [pprint]]))
 
 (defqueries request-queries
-  [::inputs [] [?request <- ::input/Input]]
+  [::inputs [] [?request <- ::input/InputRequest]]
   [::edit-requests [] [?request <- ::todo/EditRequest]]
   [::update-done-requests [] [?request <- ::todo/UpdateDoneRequest]]
   [::retract-todo-requests [] [?request <- ::todo/RetractTodoRequest]]
   [::complete-all-request [] [?request <- ::todo/CompleteAllRequest]]
   [::retract-complete-request [] [?request <- ::todo/RetractCompletedRequest]]
-  [::visibility-request [] [?request <- ::todo/VisibilityRequest]]
-
-  [::value-request [] [?request <- ::input/ValueRequest]])
+  [::visibility-request [] [?request <- ::todo/VisibilityRequest]])
 
 (def query-pdf
   {::inputs                   20
    ::edit-requests            5
-   ::update-done-requests     10
+   ::update-done-requests     20
    ::retract-todo-requests    3
    ::complete-all-request     1
    ::retract-complete-request 1
@@ -115,7 +113,7 @@
         (when (< i iterations)
           (let [request (select-request @session-atom)]
             (condp = (rules/spec-type request)
-              ::input/Input
+              ::input/InputRequest
               (<! (input-responses session-atom request delay-ms))
 
               ::todo/EditRequest

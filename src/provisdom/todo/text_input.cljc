@@ -10,14 +10,15 @@
 (s/def ::initial-value ::value)
 (s/def ::persistent? boolean?)
 (s/def ::committed? boolean?)
-(def-derive ::Input ::common/Request (s/keys :req [::id ::initial-value]))
-(derive ::Input ::common/Cancellable)
+(def-derive ::InputRequest ::common/Request (s/keys :req [::id ::initial-value]))
+(derive ::InputRequest ::common/Cancellable)
 (def-derive ::InputValue ::common/Response (s/keys :req [::value]))
+(derive ::InputValue ::common/Request)
 (def-derive ::InputResponse ::InputValue)
 
-(def-derive ::InputRequest ::common/Request (s/keys :req [::Input]))
-(def-derive ::CommitRequest ::InputRequest)
-(def-derive ::ValueRequest ::InputRequest)
+(def-derive ::InputValueRequest ::common/Request (s/keys :req [::InputValue]))
+(def-derive ::CommitRequest ::InputValueRequest)
+(def-derive ::ValueRequest ::InputValueRequest)
 (def-derive ::ValueResponse ::common/Response (s/keys :req [::value]))
 
 (def request->response
@@ -28,41 +29,37 @@
 (defrules rules
   [::input!
    "Create an InputValue fact to hold the current value of the Input."
-   [?input <- ::Input (= ?initial-value initial-value)]
+   [?input <- ::InputRequest (= ?initial-value initial-value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ?initial-value}))]
 
-  [::comittable-input!
-   "If the value of the Input is not empty, it is legal to commit the value."
-   [?input <- ::Input]
-   [::InputValue (= ?input Request) (not-empty value)]
-   [::common/ResponseFunction (= ?response-fn response-fn)]
-   =>
-   (rules/insert! ::CommitRequest (common/request {::Input ?input} ::common/Response ?response-fn))]
-
   [::value-request!
    "Request an new value for the Input."
-   [?input-value <- ::InputValue (= ?input Request)]
-   [?input <- ::Input]
+   [?input-value <- ::InputValue ]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::ValueRequest (common/request {::Input ?input} ::ValueResponse ?response-fn))]
+   (rules/insert! ::ValueRequest (common/request {::InputValue ?input-value} ::ValueResponse ?response-fn))]
 
   [::value-response!
    "Handle the response to ValueRequest, update InputValue."
-   [?input <- ::Input]
-   [?request <- ::ValueRequest (= ?input Input)]
+   [?request <- ::ValueRequest (= ?input-value InputValue)]
    [::ValueResponse (= ?request Request) (= ?value value)]
-   [?input-value <- ::InputValue (= ?input Request)]
+   [?input-value <- ::InputValue]
    =>
    (rules/upsert! ::InputValue ?input-value assoc ::value ?value)]
+
+  [::comittable-input!
+   "If the value of the Input is not empty, it is legal to commit the value."
+   [?input-value <- ::InputValue  (not-empty value)]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
+   =>
+   (rules/insert! ::CommitRequest (common/request {::InputValue ?input-value} ::common/Response ?response-fn))]
 
   [::commit-response!
    "Handle response to CommitRequest, insert InputResponse to signal
     the value has been committed."
-   [?input <- ::Input]
-   [?request <- ::CommitRequest (= ?input Input)]
+   [?request <- ::CommitRequest (= ?input-value InputValue)]
    [::common/Response (= ?request Request)]
    [?input-value <- ::InputValue (= ?value value) (= ?input Request)]
    =>
@@ -70,8 +67,8 @@
 
 ;;; Queries
 (defqueries request-queries
-  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input Input)]]
-  [::value-request [:?input] [?request <- ::ValueRequest (= ?input Input)]])
+  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input-value InputValue)] [?input-value <- ::InputValue (= ?input Request)]]
+  [::value-request [:?input] [?request <- ::ValueRequest (= ?input-value InputValue)] [?input-value <- ::InputValue (= ?input Request)]])
 
 (defqueries view-queries
   [::value [:?input] [::InputValue (= ?input Request) (= ?value value)]])

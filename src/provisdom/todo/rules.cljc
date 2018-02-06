@@ -71,20 +71,20 @@
   [::new-todo-request!
    "Always want to allow a new todo to be entered, so if the input does not
     exist, insert it."
-   [:not [::input/Input (= "new-todo" id)]]
+   [:not [::input/InputRequest (= "new-todo" id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::input/Input (common/request {::input/id "new-todo" ::input/initial-value ""} ::input/InputResponse ?response-fn))]
+   (rules/insert-unconditional! ::input/InputRequest (common/request {::input/id "new-todo" ::input/initial-value ""} ::input/InputResponse ?response-fn))]
 
   [::new-todo-response!
    "Handle a new todo."
-   [?request <- ::input/Input (= "new-todo" id)]
+   [?request <- ::input/InputRequest (= "new-todo" id)]
    [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
    (rules/insert-unconditional! ::Todo (new-todo ?title))
    ;;; Input state is initialized by inserting a new input, so just retract the old one
    ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
-   (rules/retract! ::input/Input ?request)]
+   (rules/retract! ::input/InputRequest ?request)]
 
   [::update-request!
    "When visibility changes or a new todo is inserted, conditionally insert
@@ -103,11 +103,11 @@
    [?todo <- ::Todo (= ?title title)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::input/Input (common/request {::input/id ?todo ::input/initial-value ?title} ::input/InputResponse ?response-fn))]
+   (rules/insert! ::input/InputRequest (common/request {::input/id ?todo ::input/initial-value ?title} ::input/InputResponse ?response-fn))]
 
   [::update-title-response!
    "Update the title when the edit value is committed."
-   [?request <- ::input/Input (= ?todo id)]
+   [?request <- ::input/InputRequest (= ?todo id)]
    [::input/InputResponse (= ?request Request) (= ?title value)]
    [?todo <- ::Todo]
    =>
@@ -196,7 +196,7 @@
   [::completed-count [] [?count <- (acc/count) :from [::Todo (= true done)]]])
 
 (defqueries request-queries
-  [::input [:?id] [?request <- ::input/Input (= ?id id)]]
+  [::input [:?id] [?request <- ::input/InputRequest (= ?id id)]]
   [::edit-request [:?todo] [?request <- ::EditRequest (= ?todo Todo)]]
   [::update-done-request [:?todo] [?request <- ::UpdateDoneRequest (= ?todo Todo)]]
   [::retract-todo-request [:?todo] [?request <- ::RetractTodoRequest (= ?todo Todo)]]
