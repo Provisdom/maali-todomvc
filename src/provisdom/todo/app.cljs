@@ -30,7 +30,7 @@
 (def *test* :sync)
 (defn init []
   (condp = *test*
-    :sync (test/abuse 1000 20)
+    :sync (test/abuse 100 20)
     :async (test/abuse-async 10 20 3)
 
     (let [session-atom (atom init-session)

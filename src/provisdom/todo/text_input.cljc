@@ -7,9 +7,10 @@
 
 (s/def ::id any?)
 (s/def ::value string?)
+(s/def ::initial-value ::value)
 (s/def ::persistent? boolean?)
 (s/def ::committed? boolean?)
-(def-derive ::Input ::common/Request (s/keys :req [::id]))
+(def-derive ::Input ::common/Request (s/keys :req [::id ::initial-value]))
 (derive ::Input ::common/Cancellable)
 (def-derive ::InputValue ::common/Response (s/keys :req [::value]))
 (def-derive ::InputResponse ::InputValue)
@@ -27,10 +28,10 @@
 (defrules rules
   [::input!
    "Create an InputValue fact to hold the current value of the Input."
-   [?input <- ::Input]
+   [?input <- ::Input (= ?initial-value initial-value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ""}))]
+   (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ?initial-value}))]
 
   [::comittable-input!
    "If the value of the Input is not empty, it is legal to commit the value."
@@ -81,16 +82,6 @@
                                       provisdom.todo.text-input/view-queries}))
 
 ;;; View
-
-;;; rum mixin to pass the initial value passed to the component to
-;;; the rulebase, setting the InputValue for the associated Input.
-(def init-text-input
-  {:will-mount
-   (fn [{[session input initial-value] :rum/args :as state}]
-     (let [value-request (common/query-one :?request session ::value-request :?input input)]
-       (if value-request (common/respond-to value-request {::value initial-value}))
-       state))})
-
 (defn input-id
   "The logical ID used in facts could be anything, including a Clojure map.
    Use this function to make a HTML-friendly id from the hash of whatever data
@@ -98,8 +89,8 @@
   [id]
   (if (string? id) id (hasch/uuid id)))
 
-(rum/defc text-input < init-text-input
-          [session input initial-value & attrs]
+(rum/defc text-input
+          [session input & attrs]
           (let [attrs-map (into {} (map vec (partition 2 attrs)))
                 commit-request (common/query-one :?request session ::commit-request :?input input)
                 value-request (common/query-one :?request session ::value-request :?input input)
