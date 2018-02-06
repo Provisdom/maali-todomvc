@@ -96,36 +96,27 @@
           (:?request (rand-nth requests)))))))
 
 (defn abuse
-  [iterations delay-ms]
-  (let [session-atom (atom init-session)
-        response-fn (fn [spec response]
-                      (swap! session-atom todo/handle-response [spec response])
-                      #_(inspect/explain-activations @session-atom))
-        session (-> (apply rules/insert init-session ::todo/Todo todos)
-                    (rules/insert ::todo/Anchor {::common/time (common/now)})
-                    (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
-                    (rules/fire-rules))]
-    (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
-    (reset! session-atom session)
-    (async/go
-      (loop [i 0]
-        (enable-console-print!)
-        (when (< i iterations)
-          (let [request (select-request @session-atom)]
-            (condp = (rules/spec-type request)
-              ::input/InputRequest
-              (<! (input-responses session-atom request delay-ms))
+  [session-atom iterations delay-ms]
+  (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
+  (async/go
+    (loop [i 0]
+      (enable-console-print!)
+      (when (< i iterations)
+        (let [request (select-request @session-atom)]
+          (condp = (rules/spec-type request)
+            ::input/InputRequest
+            (<! (input-responses session-atom request delay-ms))
 
-              ::todo/EditRequest
-              (do
-                (common/respond-to request (gen-response request))
-                (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                  (<! (input-responses session-atom input delay-ms))))
+            ::todo/EditRequest
+            (do
+              (common/respond-to request (gen-response request))
+              (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                (<! (input-responses session-atom input delay-ms))))
 
-              (common/respond-to request (gen-response request)))
-            (<! (async/timeout delay-ms))
-            (recur (inc i)))))
-      (println "DONE!"))))
+            (common/respond-to request (gen-response request)))
+          (<! (async/timeout delay-ms))
+          (recur (inc i)))))
+    (println "DONE!")))
 
 
 (defn abuse-async

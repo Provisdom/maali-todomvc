@@ -12,14 +12,11 @@
 (s/def ::committed? boolean?)
 (def-derive ::InputRequest ::common/Request (s/keys :req [::id ::initial-value]))
 (derive ::InputRequest ::common/Cancellable)
-(def-derive ::InputValue ::common/Response (s/keys :req [::value]))
-(derive ::InputValue ::common/Request)
-(def-derive ::InputResponse ::InputValue)
-
-(def-derive ::InputValueRequest ::common/Request (s/keys :req [::InputValue]))
-(def-derive ::CommitRequest ::InputValueRequest)
-(def-derive ::ValueRequest ::InputValueRequest)
-(def-derive ::ValueResponse ::common/Response (s/keys :req [::value]))
+(def-derive ::InputValueRequest ::common/Response (s/merge ::common/Request (s/keys :req [::value])))
+(derive ::InputValueRequest ::common/Request)
+(def-derive ::InputValueResponse ::common/Response (s/keys :req [::value]))
+(def-derive ::CommitRequest ::common/Request (s/keys ::req [::InputRequest]))
+(def-derive ::InputResponse ::common/Response (s/keys :req [::value]))
 
 (def request->response
   {::CommitRequest ::common/Response
@@ -32,46 +29,40 @@
    [?input <- ::InputRequest (= ?initial-value initial-value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::InputValue (common/request {::common/Request ?input ::value ?initial-value}))]
-
-  [::value-request!
-   "Request an new value for the Input."
-   [?input-value <- ::InputValue ]
-   [::common/ResponseFunction (= ?response-fn response-fn)]
-   =>
-   (rules/insert! ::ValueRequest (common/request {::InputValue ?input-value} ::ValueResponse ?response-fn))]
+   (rules/insert-unconditional! ::InputValueRequest (common/request {::common/Request ?input ::value ?initial-value} ::InputValueResponse ?response-fn))]
 
   [::value-response!
    "Handle the response to ValueRequest, update InputValue."
-   [?request <- ::ValueRequest (= ?input-value InputValue)]
-   [::ValueResponse (= ?request Request) (= ?value value)]
-   [?input-value <- ::InputValue]
+   [?request <- ::InputValueRequest ]
+   [::InputValueResponse (= ?request Request) (= ?value value)]
    =>
-   (rules/upsert! ::InputValue ?input-value assoc ::value ?value)]
+   (rules/upsert! ::InputValueRequest ?request assoc ::value ?value)]
 
   [::comittable-input!
-   "If the value of the Input is not empty, it is legal to commit the value."
-   [?input-value <- ::InputValue  (not-empty value)]
+   "If the value of the InputValueRequest is not empty, it is legal to commit the value."
+   [?input-value <- ::InputValueRequest (= ?input Request) (not-empty value)]
+   [?input <- ::InputRequest]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::CommitRequest (common/request {::InputValue ?input-value} ::common/Response ?response-fn))]
+   (rules/insert! ::CommitRequest (common/request {::InputRequest ?input} ::common/Response ?response-fn))]
 
   [::commit-response!
    "Handle response to CommitRequest, insert InputResponse to signal
     the value has been committed."
-   [?request <- ::CommitRequest (= ?input-value InputValue)]
+   [?request <- ::CommitRequest (= ?input InputRequest)]
    [::common/Response (= ?request Request)]
-   [?input-value <- ::InputValue (= ?value value) (= ?input Request)]
+   [?input <- ::InputRequest]
+   [?input-value <- ::InputValueRequest (= ?value value) (= ?input Request)]
    =>
    (rules/insert! ::InputResponse {::common/Request ?input ::value ?value})])
 
 ;;; Queries
 (defqueries request-queries
-  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input-value InputValue)] [?input-value <- ::InputValue (= ?input Request)]]
-  [::value-request [:?input] [?request <- ::ValueRequest (= ?input-value InputValue)] [?input-value <- ::InputValue (= ?input Request)]])
+  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input InputRequest)] ]
+  [::value-request [:?input] [?request <- ::InputValueRequest (= ?input Request)]])
 
 (defqueries view-queries
-  [::value [:?input] [::InputValue (= ?input Request) (= ?value value)]])
+  [::value [:?input] [::InputValueRequest (= ?input Request) (= ?value value)]])
 
 (def productions (clojure.set/union common/productions
                                     #{provisdom.todo.text-input/rules
