@@ -90,5 +90,3 @@
    [:not [?request <- ::Request]]
    =>
    (rules/retract! (rules/spec-type ?response) ?response)])
-
-(def productions #{provisdom.todo.common/rules})

@@ -64,11 +64,6 @@
 (defqueries view-queries
   [::value [:?input] [::InputValueRequest (= ?input Request) (= ?value value)]])
 
-(def productions (clojure.set/union common/productions
-                                    #{provisdom.todo.text-input/rules
-                                      provisdom.todo.text-input/request-queries
-                                      provisdom.todo.text-input/view-queries}))
-
 ;;; View
 (defn input-id
   "The logical ID used in facts could be anything, including a Clojure map.

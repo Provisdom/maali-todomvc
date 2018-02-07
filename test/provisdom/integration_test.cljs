@@ -119,26 +119,3 @@
     (println "DONE!")))
 
 
-(defn abuse-async
-  [iterations delay-ms max-responses]
-  (async/go-loop [i 0
-                  session (<! session-ch)]
-    (view/run session)
-    (enable-console-print!)
-    (when (< i iterations)
-      (let [n (if (< (rand) (/ 2 (dec max-responses))) (rand-int max-responses) 0)
-            requests (repeatedly n #(select-request session))]
-        (let [s (if (= 0 n)
-                  session
-                  (loop [[request & requests] requests
-                         session session]
-                    (if request
-                      (let [response-fn (::common/response-fn request)
-                            response (gen-response request)]
-                        (response-fn response)
-                        (recur requests (<! session-ch)))
-                      session)))]
-          (<! (async/timeout delay-ms))
-          (recur (+ i (inc n)) s))))
-    (println "DONE!")))
-

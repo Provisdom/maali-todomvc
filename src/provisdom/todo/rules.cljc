@@ -68,24 +68,6 @@
    =>
    (rules/insert-unconditional! ::Visibility {::visibility :all})]
 
-  [::new-todo-request!
-   "Always want to allow a new todo to be entered, so if the input does not
-    exist, insert it."
-   [:not [::input/InputRequest (= "new-todo" id)]]
-   [::common/ResponseFunction (= ?response-fn response-fn)]
-   =>
-   (rules/insert-unconditional! ::input/InputRequest (common/request {::input/id "new-todo" ::input/initial-value ""} ::input/InputResponse ?response-fn))]
-
-  [::new-todo-response!
-   "Handle a new todo."
-   [?request <- ::input/InputRequest (= "new-todo" id)]
-   [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
-   =>
-   (rules/insert-unconditional! ::Todo (new-todo ?title))
-   ;;; Input state is initialized by inserting a new input, so just retract the old one
-   ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
-   (rules/retract! ::input/InputRequest ?request)]
-
   [::update-request!
    "When visibility changes or a new todo is inserted, conditionally insert
     requests to update todos."
@@ -95,6 +77,20 @@
    (rules/insert! ::EditRequest (common/request {::Todo ?todo} ::common/Response ?response-fn))
    (rules/insert! ::UpdateDoneRequest (common/request {::Todo ?todo} ::UpdateDoneResponse ?response-fn))
    (rules/insert! ::RetractTodoRequest (common/request {::Todo ?todo} ::common/Response ?response-fn))]
+
+  [::update-done-response!
+   "Handle response to a one update request."
+   [?request <- ::UpdateDoneRequest (= ?todo Todo)]
+   [::UpdateDoneResponse (= ?request Request) (= ?done done)]
+   =>
+   (rules/upsert! ::Todo ?todo assoc ::done ?done)]
+
+  [::retract-todo-response!
+   "Handle response to retract todo request."
+   [?request <- ::RetractTodoRequest (= ?todo Todo)]
+   [::common/Response (= ?request Request)]
+   =>
+   (rules/retract! ::Todo ?todo)]
 
   [::edit-todo-response!
    "Make an Input when the user chooses to edit a todo."
@@ -113,19 +109,23 @@
    =>
    (rules/upsert! ::Todo ?todo assoc ::title ?title ::common/time (common/now))]
 
-  [::update-done-response!
-   "Handle response to a one update request."
-   [?request <- ::UpdateDoneRequest (= ?todo Todo)]
-   [::UpdateDoneResponse (= ?request Request) (= ?done done)]
+  [::new-todo-request!
+   "Always want to allow a new todo to be entered, so if the input does not
+    exist, insert it."
+   [:not [::input/InputRequest (= "new-todo" id)]]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/upsert! ::Todo ?todo assoc ::done ?done)]
+   (rules/insert-unconditional! ::input/InputRequest (common/request {::input/id "new-todo" ::input/initial-value ""} ::input/InputResponse ?response-fn))]
 
-  [::retract-todo-response!
-   "Handle response to retract todo request."
-   [?request <- ::RetractTodoRequest (= ?todo Todo)]
-   [::common/Response (= ?request Request)]
+  [::new-todo-response!
+   "Handle a new todo."
+   [?request <- ::input/InputRequest (= "new-todo" id)]
+   [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
-   (rules/retract! ::Todo ?todo)]
+   (rules/insert-unconditional! ::Todo (new-todo ?title))
+   ;;; Input state is initialized by inserting a new input, so just retract the old one
+   ;;; and let the ::new-todo-request! rule and it's logical consequents handle the rest.
+   (rules/retract! ::input/InputRequest ?request)]
 
   [::complete-all-request!
    "Toggles the done attribute of all todos. If all todos are not done,
@@ -203,9 +203,3 @@
   [::complete-all-request [] [?request <- ::CompleteAllRequest]]
   [::retract-complete-request [] [?request <- ::RetractCompletedRequest]]
   [::visibility-request [] [?request <- ::VisibilityRequest]])
-
-(def productions (clojure.set/union common/productions
-                                    input/productions
-                                    #{provisdom.todo.rules/rules
-                                      provisdom.todo.rules/view-queries
-                                      provisdom.todo.rules/request-queries}))
