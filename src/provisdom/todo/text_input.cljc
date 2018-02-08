@@ -33,7 +33,7 @@
 
   [::value-response!
    "Handle the response to ValueRequest, update InputValue."
-   [?request <- ::InputValueRequest ]
+   [?request <- ::InputValueRequest]
    [::InputValueResponse (= ?request Request) (= ?value value)]
    =>
    (rules/upsert! ::InputValueRequest ?request assoc ::value ?value)]

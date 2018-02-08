@@ -20,25 +20,14 @@
             (todo/new-todo "Allow any arguments to component functions" 4)])
 
 
-(def *test* false)
-(if *test*
-  (defsession init-session [provisdom.todo.common/rules
-                            provisdom.todo.text-input/rules
-                            provisdom.todo.text-input/view-queries
-                            provisdom.todo.text-input/request-queries
-                            provisdom.todo.rules/rules
-                            provisdom.todo.rules/view-queries
-                            provisdom.todo.rules/request-queries
-
-                            provisdom.integration-test/request-queries])
-
-  (defsession init-session [provisdom.todo.common/rules
-                            provisdom.todo.text-input/rules
-                            provisdom.todo.text-input/view-queries
-                            provisdom.todo.text-input/request-queries
-                            provisdom.todo.rules/rules
-                            provisdom.todo.rules/view-queries
-                            provisdom.todo.rules/request-queries]))
+(def *test* true)
+(defsession init-session [provisdom.todo.common/rules
+                          provisdom.todo.text-input/rules
+                          provisdom.todo.text-input/view-queries
+                          provisdom.todo.text-input/request-queries
+                          provisdom.todo.rules/rules
+                          provisdom.todo.rules/view-queries
+                          provisdom.todo.rules/request-queries])
 
 (defn init []
   (let [session-atom (atom init-session)

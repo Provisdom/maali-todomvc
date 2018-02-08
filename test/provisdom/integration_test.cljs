@@ -10,23 +10,14 @@
             [clojure.spec.gen.alpha :as sg]
             [cljs.pprint :refer [pprint]]))
 
-(defqueries request-queries
-  [::inputs [] [?request <- ::input/InputRequest]]
-  [::edit-requests [] [?request <- ::todo/EditRequest]]
-  [::update-done-requests [] [?request <- ::todo/UpdateDoneRequest]]
-  [::retract-todo-requests [] [?request <- ::todo/RetractTodoRequest]]
-  [::complete-all-request [] [?request <- ::todo/CompleteAllRequest]]
-  [::retract-complete-request [] [?request <- ::todo/RetractCompletedRequest]]
-  [::visibility-request [] [?request <- ::todo/VisibilityRequest]])
-
 (def query-pdf
-  {::inputs                   20
-   ::edit-requests            5
-   ::update-done-requests     20
-   ::retract-todo-requests    3
-   ::complete-all-request     1
-   ::retract-complete-request 1
-   ::visibility-request       5})
+  {::todo/input                    20
+   ::todo/edit-request             5
+   ::todo/update-done-request      20
+   ::todo/retract-todo-request     3
+   ::todo/complete-all-request     1
+   ::todo/retract-complete-request 1
+   ::todo/visibility-request       5})
 
 (def query-cdf
   (let [z (apply + (vals query-pdf))
@@ -40,20 +31,6 @@
   []
   (let [r (rand)]
     (val (first (filter (fn [[p q]] (>= p r)) query-cdf)))))
-
-(def todos [(todo/new-todo "Rename Cloact to Reagent")
-            (todo/new-todo "Add undo demo")
-            (todo/new-todo "Make all rendering async")
-            (todo/new-todo "Allow any arguments to component functions")])
-
-(defsession init-session [provisdom.todo.common/rules
-                          provisdom.todo.text-input/rules
-                          provisdom.todo.text-input/view-queries
-                          provisdom.todo.text-input/request-queries
-                          provisdom.todo.rules/rules
-                          provisdom.todo.rules/view-queries
-                          provisdom.todo.rules/request-queries
-                          provisdom.integration-test/request-queries])
 
 (def request->response
   {::todo/EditRequest             ::common/Response
@@ -90,7 +67,7 @@
   (loop [i 0]
     (when (< i 100)
       (let [query (sample-query)
-            requests (rules/query session query)]
+            requests (rules/query-partial session query)]
         (if (empty? requests)
           (recur (inc i))
           (:?request (rand-nth requests)))))))
