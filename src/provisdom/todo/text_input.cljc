@@ -8,10 +8,7 @@
 (s/def ::id any?)
 (s/def ::value string?)
 (s/def ::initial-value ::value)
-(s/def ::persistent? boolean?)
-(s/def ::committed? boolean?)
-(s/def ::Input (s/keys :req [::id ::common/session]))
-(def-derive ::InputRequest ::common/Request (s/keys :req [::initial-value]))
+(def-derive ::InputRequest ::common/Request (s/keys :req [::id ::initial-value ::common/session]))
 (derive ::InputRequest ::common/Cancellable)
 (def-derive ::InputValueRequest ::common/Response (s/merge ::common/Request (s/keys :req [::value])))
 (derive ::InputValueRequest ::common/Request)
@@ -19,11 +16,8 @@
 (def-derive ::CommitRequest ::common/Request (s/keys ::req [::InputRequest]))
 (def-derive ::InputResponse ::common/Response (s/keys :req [::value]))
 
-(s/def ::commit-fn (s/fspec :args (s/cat :value ::value) :ret any?))
-(s/def ::CommitFunction (s/keys :req [::commit-fn]))
-
 ;;; Rules
-(defrules rules
+(defrules base-rules
   [::value-request!
    "Create an InputValue fact to hold the current value of the Input."
    [?input <- ::InputRequest (= ?initial-value initial-value)]
@@ -38,14 +32,6 @@
    =>
    (rules/upsert! ::InputValueRequest ?request assoc ::value ?value)]
 
-  [::comittable-input!
-   "If the value of the InputValueRequest is not empty, it is legal to commit the value."
-   [?input-value <- ::InputValueRequest (= ?input Request) (not-empty value)]
-   [?input <- ::InputRequest]
-   [::common/ResponseFunction (= ?response-fn response-fn)]
-   =>
-   (rules/insert! ::CommitRequest (common/request {::InputRequest ?input} ::common/Response ?response-fn))]
-
   [::commit-response!
    "Handle response to CommitRequest, insert InputResponse to signal
     the value has been committed."
@@ -53,34 +39,46 @@
    [::common/Response (= ?request Request)]
    [?input <- ::InputRequest]
    [?input-value <- ::InputValueRequest (= ?value value) (= ?input Request)]
-   [::CommitFunction (= ?commit-fn commit-fn)]
    =>
-   (?commit-fn ?value)
-   #_(rules/insert! ::InputResponse {::common/Request ?input ::value ?value})])
+   (common/respond-to ?input {::value ?value})])
+
+(defrules validation-rules
+  [::comittable-input!
+   "If the value of the InputValueRequest is not empty, it is legal to commit the value."
+   [?input-value <- ::InputValueRequest (= ?input Request) (not-empty value)]
+   [?input <- ::InputRequest]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
+   =>
+   (rules/insert! ::CommitRequest (common/request {::InputRequest ?input} ::common/Response ?response-fn))])
 
 ;;; Queries
 (defqueries request-queries
-  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input InputRequest)]]
-  [::value-request [:?input] [?request <- ::InputValueRequest (= ?input Request)]])
+  [::commit-request [] [?request <- ::CommitRequest]]
+  [::value-request [] [?request <- ::InputValueRequest]])
 
 (defqueries view-queries
-  [::value [:?input] [::InputValueRequest (= ?input Request) (= ?value value)]])
+  [::value [] [::InputValueRequest (= ?value value)]])
 
-(defsession init-session [provisdom.todo.text-input/rules
+(defsession init-session [provisdom.todo.text-input/base-rules
+                          provisdom.todo.text-input/validation-rules
                           provisdom.todo.text-input/request-queries
                           provisdom.todo.text-input/view-queries])
 
-;;; TODO - can't make this fractal until the view updates independently
-;;; The watch on the atom only serves the purpose of notifying the view to update.
 (defn create
-  [initial-value commit-fn]
-  (let [session (-> init-session
-                    (rules/insert ::CommitFunction {::commit-fn commit-fn})
-                    (rules/insert ::InputRequest {::initial-value initial-value})
-                    (rules/fire-rules))
-        session-atom (atom session)
+  [id initial-value commit-fn]
+  (let [session-atom (atom nil)
+        input-request (common/request {::id id ::initial-value initial-value ::common/session session-atom}
+                                      ::InputResponse commit-fn)
         response-fn (fn [spec response]
-                      (swap! session-atom handle-response [spec response]))]))
+                      (swap! session-atom common/handle-response [spec response]))
+        session (-> init-session
+                    (rules/insert ::InputRequest input-request)
+                    (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
+                    (rules/fire-rules))]
+    (reset! session-atom session)
+    input-request))
+
+
 ;;; View
 (defn input-id
   "The logical ID used in facts could be anything, including a Clojure map.
@@ -89,20 +87,21 @@
   [id]
   (if (string? id) id (hasch/uuid id)))
 
-(rum/defc text-input
-          [session input & attrs]
-          (let [attrs-map (into {} (map vec (partition 2 attrs)))
-                commit-request (common/query-one :?request session ::commit-request :?input input)
-                value-request (common/query-one :?request session ::value-request :?input input)
-                value (common/query-one :?value session ::value :?input input)]
-            (when value
-              [:input (merge attrs-map
-                             {:type        "text"
-                              :value       value
-                              :id          (input-id (::id input))
-                              :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
-                              :on-blur     #(when commit-request (common/respond-to commit-request))
-                              :on-key-down #(let [key-code (.-keyCode %)]
-                                              (cond
-                                                (and text-input (= 27 key-code)) (common/cancel-request input)
-                                                (and commit-request (= 13 key-code)) (common/respond-to commit-request)))})])))
+(rum/defc text-input < rum/reactive
+  [input & attrs]
+  (let [session (rum/react (::common/session input))
+        attrs-map (into {} (map vec (partition 2 attrs)))
+        commit-request (common/query-one :?request session ::commit-request)
+        value-request (common/query-one :?request session ::value-request)
+        value (common/query-one :?value session ::value)]
+    (when value
+      [:input (merge attrs-map
+                     {:type        "text"
+                      :value       value
+                      :id          (input-id (::id input))
+                      :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
+                      :on-blur     #(when commit-request (common/respond-to commit-request))
+                      :on-key-down #(let [key-code (.-keyCode %)]
+                                      (cond
+                                        (and text-input (= 27 key-code)) (common/cancel-request input)
+                                        (and commit-request (= 13 key-code)) (common/respond-to commit-request)))})])))

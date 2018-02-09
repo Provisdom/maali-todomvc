@@ -3,6 +3,7 @@
             [clojure.spec.gen.alpha :as sg]
             [clojure.test.check.generators]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
+            [provisdom.maali.tracing :as tracing]
             [clojure.pprint :refer [pprint]]
             [hasch.core :as hasch]))
 
@@ -45,6 +46,20 @@
 (defn response-fn
   ([x] (-> x meta ::response-fn))
   ([x f] (vary-meta x assoc ::response-fn f)))
+
+;;; Reducing function to produce the new session from a supplied response.
+(defn handle-response
+  ([session spec-response] (handle-response session spec-response false))
+  ([session [spec response] trace?]
+   (if trace?
+     (-> session
+         (tracing/with-tracing)
+         (rules/insert spec response)
+         (rules/fire-rules)
+         (tracing/print-trace))
+     (-> session
+         (rules/insert spec response)
+         (rules/fire-rules)))))
 
 (defn request
   ([] (request {}))

@@ -29,23 +29,11 @@
                           provisdom.todo.rules/view-queries
                           provisdom.todo.rules/request-queries])
 
-;;; Reducing function to produce the new session from a supplied response.
-(defn handle-response
-  [session [spec response]]
-  (if session
-    (-> session
-        #_(tracing/with-tracing)
-        (rules/insert spec response)
-        (rules/fire-rules)
-        #_(tracing/print-trace))
-
-    response))
-
 (def *test* true)
 (defn init []
   (let [session-atom (atom init-session)
         response-fn (fn [spec response]
-                      (swap! session-atom handle-response [spec response]))
+                      (swap! session-atom common/handle-response [spec response]))
         session (-> (apply rules/insert init-session ::todo/Todo todos)
                     (rules/insert ::todo/Anchor {::common/time (common/now)})
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})

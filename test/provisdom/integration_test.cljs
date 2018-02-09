@@ -41,21 +41,22 @@
    ::todo/VisibilityRequest       ::todo/VisibilityResponse})
 
 (defn input-responses
-  [session-atom input delay-ms]
-  (async/go
-    (let [value (sg/generate (s/gen ::input/value))
-          values (reductions #(str %1 %2) (first value) (rest value))]
-      (loop [[value & values] values]
-        (if value
-          (let [value-request (common/query-one :?request @session-atom ::input/value-request :?input input)]
-            (common/respond-to value-request {::input/value value})
-            (<! (async/timeout (* 0.1 delay-ms)))
-            (recur values))))
-      (let [commit-request (common/query-one :?request @session-atom ::input/commit-request :?input input)]
-        (if (and commit-request (< (rand) 0.9))
-          (common/respond-to commit-request)
-          (common/cancel-request input))))
-    true))
+  [input delay-ms]
+  (let [session-atom (::common/session input)]
+    (async/go
+      (let [value (sg/generate (s/gen ::input/value))
+            values (reductions #(str %1 %2) (first value) (rest value))]
+        (loop [[value & values] values]
+          (if value
+            (let [value-request (common/query-one :?request @session-atom ::input/value-request)]
+              (common/respond-to value-request {::input/value value})
+              (<! (async/timeout (* 0.1 delay-ms)))
+              (recur values))))
+        (let [commit-request (common/query-one :?request @session-atom ::input/commit-request)]
+          (if (and commit-request (< (rand) 0.9))
+            (common/respond-to commit-request)
+            (common/cancel-request input))))
+      true)))
 
 (defn gen-response
   [request]
@@ -81,13 +82,13 @@
         (let [request (select-request @session-atom)]
           (condp = (rules/spec-type request)
             ::input/InputRequest
-            (<! (input-responses session-atom request delay-ms))
+            (<! (input-responses request delay-ms))
 
             ::todo/EditRequest
             (do
               (common/respond-to request (gen-response request))
               (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                (<! (input-responses session-atom input delay-ms))))
+                (<! (input-responses input delay-ms))))
 
             (common/respond-to request (gen-response request)))
           (<! (async/timeout delay-ms))

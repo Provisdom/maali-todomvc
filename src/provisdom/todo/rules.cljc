@@ -77,7 +77,7 @@
    [?todo <- ::Todo (= ?title title)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert! ::input/InputRequest (common/request {::input/id ?todo ::input/initial-value ?title} ::input/InputResponse ?response-fn))]
+   (rules/insert! ::input/InputRequest (input/create ?todo ?title ?response-fn))]
 
   [::update-title-response!
    "Update the title when the edit value is committed."
@@ -93,7 +93,7 @@
    [:not [::input/InputRequest (= "new-todo" id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
-   (rules/insert-unconditional! ::input/InputRequest (common/request {::input/id "new-todo" ::input/initial-value ""} ::input/InputResponse ?response-fn))]
+   (rules/insert-unconditional! ::input/InputRequest (input/create "new-todo" "" ?response-fn))]
 
   [::new-todo-response!
    "Handle a new todo."
