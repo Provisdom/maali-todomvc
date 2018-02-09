@@ -37,8 +37,8 @@
         #_(tracing/with-tracing)
         (rules/insert spec response)
         (rules/fire-rules)
-        #_(tracing/print-trace)
-        )
+        #_(tracing/print-trace))
+
     response))
 
 (def *test* true)
@@ -51,7 +51,7 @@
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
                     (rules/fire-rules))]
     ;;; Initialize with the session.
-    (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
     (reset! session-atom session)
+    (view/run session-atom)
     (when *test*
        (test/abuse session-atom 100 20))))

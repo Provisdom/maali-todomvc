@@ -63,8 +63,9 @@
                              :on-change #(common/respond-to complete-all-request {::todo/done complete-all})}]
          [:label {:for "toggle-all"} "Mark all as complete"]]))))
 
-(rum/defc app [session]
-  (let [todos (common/query-many :?todo session ::todo/visible-todos)]
+(rum/defc app < rum/reactive [session-atom]
+  (let [session (rum/react session-atom)
+        todos (common/query-many :?todo session ::todo/visible-todos)]
     [:div
      [:section#todoapp
       (header session)
@@ -80,5 +81,5 @@
      [:footer#info
       [:p "Double-click to edit a todo"]]]))
 
-(defn ^:export run [session]
-  (rum/mount (app session) (js/document.getElementById "app")))
+(defn ^:export run [session-atom]
+  (rum/mount (app session-atom) (js/document.getElementById "app")))

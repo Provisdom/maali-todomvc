@@ -74,7 +74,6 @@
 
 (defn abuse
   [session-atom iterations delay-ms]
-  (add-watch session-atom :foo (fn [_ _ _ session] (view/run session)))
   (async/go
     (loop [i 0]
       (enable-console-print!)
