@@ -5,7 +5,9 @@
             [provisdom.maali.rules :refer-macros [defsession] :as rules]
             [cljs.core.async :refer [<! >!] :as async]
             [cljs.pprint :refer [pprint]]
-            [provisdom.integration-test :as test]))
+            [provisdom.integration-test :as test]
+            [provisdom.maali.tracing :as tracing]
+            [clara.tools.inspect :as inspect]))
 
 #_(st/instrument)
 
@@ -19,8 +21,6 @@
             (todo/new-todo "Make all rendering async" 3)
             (todo/new-todo "Allow any arguments to component functions" 4)])
 
-
-(def *test* true)
 (defsession init-session [provisdom.todo.common/rules
                           provisdom.todo.text-input/rules
                           provisdom.todo.text-input/view-queries
@@ -29,10 +29,23 @@
                           provisdom.todo.rules/view-queries
                           provisdom.todo.rules/request-queries])
 
+;;; Reducing function to produce the new session from a supplied response.
+(defn handle-response
+  [session [spec response]]
+  (if session
+    (-> session
+        #_(tracing/with-tracing)
+        (rules/insert spec response)
+        (rules/fire-rules)
+        #_(tracing/print-trace)
+        )
+    response))
+
+(def *test* true)
 (defn init []
   (let [session-atom (atom init-session)
         response-fn (fn [spec response]
-                      (swap! session-atom todo/handle-response [spec response]))
+                      (swap! session-atom handle-response [spec response]))
         session (-> (apply rules/insert init-session ::todo/Todo todos)
                     (rules/insert ::todo/Anchor {::common/time (common/now)})
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})

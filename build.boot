@@ -18,7 +18,6 @@
                   [org.clojure/core.async "0.3.465"]
                   [org.clojure/test.check "0.9.0"]
                   [io.replikativ/hasch "0.3.4"]
-                  [net.cgrand/xforms "0.15.0"]
                   [rum "0.11.0"]
                   [provisdom/maali "0.0.1-SNAPSHOT"]])
 
@@ -30,8 +29,8 @@
   '[adzerk.boot-test            :refer :all]
   '[crisptrutski.boot-cljs-test :refer [test-cljs report-errors!] :as cljs-test]
   #_'[powerlaces.boot-cljs-devtools :refer [cljs-devtools dirac]]
-  '[boot.repl]
-  )
+  '[boot.repl])
+
 
 (def +version+ "0.0.1-SNAPSHOT")
 

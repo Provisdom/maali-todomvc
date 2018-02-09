@@ -2,11 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [provisdom.todo.common :as common]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
-            [provisdom.maali.tracing :as tracing]
-            [clara.tools.inspect :as inspect]
             [clara.rules.accumulators :as acc]
-            [provisdom.todo.text-input :as input]
-            [net.cgrand.xforms :as xforms])
+            [provisdom.todo.text-input :as input])
   #?(:clj
      (:import (java.util UUID))))
 
@@ -33,25 +30,6 @@
 (def-derive ::VisibilityRequest ::common/Request (s/keys :req [::visibilities]))
 (def-derive ::VisibilityResponse ::common/Response (s/keys :req [::visibility]))
 (def-derive ::EditRequest ::common/Request (s/keys :req [::Todo]))
-
-;;; Reducing function to produce the new session from a supplied response.
-(defn handle-response
-  [session [spec response]]
-  (if session
-    (-> session
-        #_(tracing/with-tracing)
-        (rules/insert spec response)
-        (rules/fire-rules)
-        #_(tracing/print-trace)
-        )
-    response))
-
-;;; Transducer which takes in responses and provides reductions over the handle-response function,
-;;; i.e. updated sessions.
-(def handle-response-xf
-  (comp
-    (xforms/reductions handle-response nil)
-    (drop 1)))                                              ;;; drop the initial nil value
 
 ;;; Convenience function to create new ::Todo facts
 (defn new-todo

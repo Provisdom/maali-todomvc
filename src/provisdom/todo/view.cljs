@@ -2,8 +2,7 @@
   (:require [rum.core :as rum]
             [provisdom.todo.common :as common]
             [provisdom.todo.rules :as todo]
-            [provisdom.todo.text-input :as input]
-            [provisdom.maali.rules :as rules]))
+            [provisdom.todo.text-input :as input]))
 
 ;;; View components
 (rum/defc stats [session]
