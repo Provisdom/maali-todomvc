@@ -10,7 +10,8 @@
 (s/def ::initial-value ::value)
 (s/def ::persistent? boolean?)
 (s/def ::committed? boolean?)
-(def-derive ::InputRequest ::common/Request (s/keys :req [::id ::initial-value]))
+(s/def ::Input (s/keys :req [::id ::common/session]))
+(def-derive ::InputRequest ::common/Request (s/keys :req [::initial-value]))
 (derive ::InputRequest ::common/Cancellable)
 (def-derive ::InputValueRequest ::common/Response (s/merge ::common/Request (s/keys :req [::value])))
 (derive ::InputValueRequest ::common/Request)
@@ -18,13 +19,12 @@
 (def-derive ::CommitRequest ::common/Request (s/keys ::req [::InputRequest]))
 (def-derive ::InputResponse ::common/Response (s/keys :req [::value]))
 
-(def request->response
-  {::CommitRequest ::common/Response
-   ::ValueRequest ::ValueResponse})
+(s/def ::commit-fn (s/fspec :args (s/cat :value ::value) :ret any?))
+(s/def ::CommitFunction (s/keys :req [::commit-fn]))
 
 ;;; Rules
 (defrules rules
-  [::input!
+  [::value-request!
    "Create an InputValue fact to hold the current value of the Input."
    [?input <- ::InputRequest (= ?initial-value initial-value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
@@ -53,17 +53,34 @@
    [::common/Response (= ?request Request)]
    [?input <- ::InputRequest]
    [?input-value <- ::InputValueRequest (= ?value value) (= ?input Request)]
+   [::CommitFunction (= ?commit-fn commit-fn)]
    =>
-   (rules/insert! ::InputResponse {::common/Request ?input ::value ?value})])
+   (?commit-fn ?value)
+   #_(rules/insert! ::InputResponse {::common/Request ?input ::value ?value})])
 
 ;;; Queries
 (defqueries request-queries
-  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input InputRequest)] ]
+  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input InputRequest)]]
   [::value-request [:?input] [?request <- ::InputValueRequest (= ?input Request)]])
 
 (defqueries view-queries
   [::value [:?input] [::InputValueRequest (= ?input Request) (= ?value value)]])
 
+(defsession init-session [provisdom.todo.text-input/rules
+                          provisdom.todo.text-input/request-queries
+                          provisdom.todo.text-input/view-queries])
+
+;;; TODO - can't make this fractal until the view updates independently
+;;; The watch on the atom only serves the purpose of notifying the view to update.
+(defn create
+  [initial-value commit-fn]
+  (let [session (-> init-session
+                    (rules/insert ::CommitFunction {::commit-fn commit-fn})
+                    (rules/insert ::InputRequest {::initial-value initial-value})
+                    (rules/fire-rules))
+        session-atom (atom session)
+        response-fn (fn [spec response]
+                      (swap! session-atom handle-response [spec response]))]))
 ;;; View
 (defn input-id
   "The logical ID used in facts could be anything, including a Clojure map.

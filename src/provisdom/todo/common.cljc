@@ -6,6 +6,7 @@
             [clojure.pprint :refer [pprint]]
             [hasch.core :as hasch]))
 
+(s/def ::session any?) ;;;TODO - figure out how to spec an atom containing a session
 (s/def ::id uuid?)
 (s/def ::Request (s/keys :req [::id]))
 (s/def ::Response (s/keys :req [::Request]))
