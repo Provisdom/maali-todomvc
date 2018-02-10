@@ -29,7 +29,7 @@
                           provisdom.todo.rules/view-queries
                           provisdom.todo.rules/request-queries])
 
-(def *test* false)
+(def *test* true)
 (defn init []
   (let [session-atom (atom init-session)
         response-fn (fn [spec response]
@@ -42,4 +42,4 @@
     (reset! session-atom session)
     (view/run session-atom)
     (when *test*
-       (test/abuse session-atom 100 20))))
+       (test/abuse session-atom 300 20))))
