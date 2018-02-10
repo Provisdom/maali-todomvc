@@ -59,7 +59,8 @@
 (defqueries view-queries
   [::value [] [::InputValueRequest (= ?value value)]])
 
-(defsession init-session [provisdom.todo.text-input/base-rules
+(defsession init-session [provisdom.todo.common/rules
+                          provisdom.todo.text-input/base-rules
                           provisdom.todo.text-input/validation-rules
                           provisdom.todo.text-input/request-queries
                           provisdom.todo.text-input/view-queries])
@@ -95,13 +96,16 @@
         value-request (common/query-one :?request session ::value-request)
         value (common/query-one :?value session ::value)]
     (when value
-      [:input (merge attrs-map
-                     {:type        "text"
-                      :value       value
-                      :id          (input-id (::id input))
-                      :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
-                      :on-blur     #(when commit-request (common/respond-to commit-request))
-                      :on-key-down #(let [key-code (.-keyCode %)]
-                                      (cond
-                                        (and text-input (= 27 key-code)) (common/cancel-request input)
-                                        (and commit-request (= 13 key-code)) (common/respond-to commit-request)))})])))
+      [:input
+       (cond-> attrs-map
+               (not commit-request) (update :class str " error")
+               true (merge {:type        "text"
+                            :value       value
+                            :id          (input-id (::id input))
+                            :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
+                            :on-blur     #(if commit-request (common/respond-to commit-request) (common/cancel-request input))
+                            :on-key-down #(let [key-code (.-keyCode %)]
+                                            (case key-code
+                                              27 (common/cancel-request input)
+                                              13 (if commit-request (common/respond-to commit-request) (common/cancel-request input))
+                                              nil))}))])))
