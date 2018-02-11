@@ -3,7 +3,7 @@
             [provisdom.todo.text-input :as input]
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
-            [provisdom.maali.rules :refer-macros [defqueries defsession] :as rules]
+            [provisdom.maali.rules :refer-macros [defqueries defsession check-invariant] :as rules]
             [clara.tools.inspect :as inspect]
             [cljs.core.async :refer [<! >!] :as async]
             [clojure.spec.alpha :as s]
@@ -40,7 +40,13 @@
    ::todo/RetractCompletedRequest ::common/Response
    ::todo/VisibilityRequest       ::todo/VisibilityResponse})
 
-;;; TODO - implement backspaces and delete all
+(def invariants
+  {::todo/RetractTodoRequest
+   (fn [old-session new-session response]
+     (let [old-todos (rules/query old-session ::todo/visible-todos)
+           new-todos (rules/query new-session ::todo/visible-todos)]
+       (check-invariant response (= 1 (- (count old-todos) (count new-todos))))))})
+
 (defn input-responses
   [input iterations delay-ms]
   (let [session-atom (::common/session input)]
@@ -80,7 +86,7 @@
             requests (rules/query-partial session query)]
         (if (empty? requests)
           (recur (inc i))
-          (:?request (rand-nth requests)))))))
+          [query (:?request (rand-nth requests))])))))
 
 (defn abuse
   [session-atom iterations delay-ms]
@@ -88,18 +94,24 @@
     (loop [i 0]
       (enable-console-print!)
       (when (< i iterations)
-        (let [request (select-request @session-atom)]
-          (condp = (rules/spec-type request)
-            ::input/InputRequest
-            (<! (input-responses request (rand-int 20) delay-ms))
+        (let [session @session-atom
+              [query request] (select-request session)
+              response (condp = (rules/spec-type request)
+                         ::input/InputRequest
+                         (<! (input-responses request (rand-int 20) delay-ms))
 
-            ::todo/EditRequest
-            (do
-              (common/respond-to request (gen-response request))
-              (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                (<! (input-responses input (rand-int 20) delay-ms))))
+                         ::todo/EditRequest
+                         (do
+                           (common/respond-to request (gen-response request))
+                           (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                             (<! (input-responses input (rand-int 20) delay-ms))))
 
-            (common/respond-to request (gen-response request)))
+                         (let [response (gen-response request)]
+                           (common/respond-to request response)
+                           response))]
+
+          (when-let [invariant (invariants (rules/spec-type request))]
+            (invariant session @session-atom response))
           (<! (async/timeout delay-ms))
           (recur (inc i)))))
     (println "DONE!")))

@@ -181,3 +181,8 @@
   [::complete-all-request [] [?request <- ::CompleteAllRequest]]
   [::retract-complete-request [] [?request <- ::RetractCompletedRequest]]
   [::visibility-request [] [?request <- ::VisibilityRequest]])
+
+(defsession init-session [provisdom.todo.common/rules
+                          provisdom.todo.rules/rules
+                          provisdom.todo.rules/view-queries
+                          provisdom.todo.rules/request-queries])
