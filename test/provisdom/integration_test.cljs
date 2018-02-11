@@ -40,13 +40,6 @@
    ::todo/RetractCompletedRequest ::common/Response
    ::todo/VisibilityRequest       ::todo/VisibilityResponse})
 
-(def invariants
-  {::todo/RetractTodoRequest
-   (fn [old-session new-session response]
-     (let [old-todos (rules/query old-session ::todo/visible-todos)
-           new-todos (rules/query new-session ::todo/visible-todos)]
-       (check-invariant response (= 1 (- (count old-todos) (count new-todos))))))})
-
 (defn input-responses
   [input iterations delay-ms]
   (let [session-atom (::common/session input)]
@@ -67,11 +60,12 @@
                   (let [backspaces (if (and (= 0 backspaces) (< (rand) 0.1)) (rand-int (dec value-index)) (max 0 (dec backspaces)))
                         value-index (if (= 0 backspaces) (min (dec (count values)) (inc value-index)) (max 0 (dec value-index)))]
                     (recur i value-index backspaces)))))))
-        (let [commit-request (common/query-one :?request @session-atom ::input/commit-request)]
-          (if (and commit-request (< (rand) 0.9))
+        (let [commit-request (common/query-one :?request @session-atom ::input/commit-request)
+              commit? (and commit-request (< (rand) 0.9))]
+          (if commit?
             (common/respond-to commit-request)
-            (common/cancel-request input))))
-      true)))
+            (common/cancel-request input))
+          commit?)))))
 
 (defn gen-response
   [request]
@@ -88,6 +82,41 @@
           (recur (inc i))
           [query (:?request (rand-nth requests))])))))
 
+(defn check-invariants
+  [request result old-session new-session]
+  (let [old-todos (common/query-many :?todo old-session ::todo/todos)
+        new-todos (common/query-many :?todo new-session ::todo/todos)]
+
+    (condp = (rules/spec-type request)
+      ::todo/RetractTodoRequest
+      (check-invariant request result (= 1 (- (count old-todos) (count new-todos))))
+
+      ::input/InputRequest
+      (check-invariant request result (= (if result 1 0) (- (count new-todos) (count old-todos))))
+
+      ::todo/EditRequest
+      (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
+
+      ::todo/RetractCompletedRequest
+      (check-invariant request result (not-any? #(= true (::todo/done %)) new-todos))
+
+      ::todo/CompleteAllRequest
+      (do
+        (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
+        (check-invariant request result (not-any? #(= false (::todo/done %)) new-todos)))
+
+      ::todo/VisibilityRequest
+      (do
+        (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
+        (check-invariant request result ((::todo/visibilities request) (::todo/visibility result)))
+        (let [visible-todos (common/query-many :?todo new-session ::todo/visible-todos)]
+          (condp = (::todo/visibility result)
+            :all (check-invariant request result (= (count visible-todos) (count old-todos)))
+            :active (check-invariant request result (every? #(= false (::todo/done %)) visible-todos))
+            :completed (check-invariant request result (every? #(= true (::todo/done %)) visible-todos)))))
+      nil)))
+
+
 (defn abuse
   [session-atom iterations delay-ms]
   (async/go
@@ -96,22 +125,22 @@
       (when (< i iterations)
         (let [session @session-atom
               [query request] (select-request session)
-              response (condp = (rules/spec-type request)
-                         ::input/InputRequest
-                         (<! (input-responses request (rand-int 20) delay-ms))
+              result (condp = (rules/spec-type request)
+                       ::input/InputRequest
+                       (<! (input-responses request (rand-int 20) delay-ms))
 
-                         ::todo/EditRequest
-                         (do
-                           (common/respond-to request (gen-response request))
-                           (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                             (<! (input-responses input (rand-int 20) delay-ms))))
+                       ::todo/EditRequest
+                       (do
+                         (common/respond-to request (gen-response request))
+                         (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                           (<! (input-responses input (rand-int 20) delay-ms))))
 
-                         (let [response (gen-response request)]
-                           (common/respond-to request response)
-                           response))]
+                       (let [response (gen-response request)]
+                         (common/respond-to request response)
+                         response))]
 
-          (when-let [invariant (invariants (rules/spec-type request))]
-            (invariant session @session-atom response))
+          (check-invariants request result session @session-atom)
+
           (<! (async/timeout delay-ms))
           (recur (inc i)))))
     (println "DONE!")))

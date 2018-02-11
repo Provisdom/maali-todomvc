@@ -8,8 +8,6 @@
      (:import (java.util UUID))))
 
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
-(s/def ::Anchor (s/keys :req [::common/time]))
-
 (s/def ::id uuid?)
 (s/def ::title string?)
 (s/def ::done boolean?)
@@ -42,7 +40,7 @@
   [::anchor!
    "Initialize visibility and the request for a new todo. Both are singletons
     so insert unconditionally here."
-   [::Anchor (= ?time time)]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert-unconditional! ::Visibility {::visibility :all})]
 
@@ -164,6 +162,7 @@
 
 ;;; Queries
 (defqueries view-queries
+  [::todos [] [?todo <- ::Todo]]
   [::visible-todos []
    [::Visibility (= ?visibility visibility)]
    [?todo <- ::Todo (condp = ?visibility

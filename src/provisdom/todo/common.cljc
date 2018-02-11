@@ -97,6 +97,7 @@
    [?request <- ::Cancellable]
    [::Cancellation (= ?request Request)]
    =>
+
    (rules/retract! (rules/spec-type ?request) ?request)]
 
   [::retract-orphan-response!
@@ -106,5 +107,6 @@
    [:not [?request <- ::Request]]
    =>
    (rules/retract! (rules/spec-type ?response) ?response)])
+
 
 

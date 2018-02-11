@@ -27,7 +27,6 @@
         response-fn (fn [spec response]
                       (swap! session-atom common/handle-response [spec response]))
         session (-> (apply rules/insert @session-atom ::todo/Todo todos)
-                    (rules/insert ::todo/Anchor {::common/time (common/now)})
                     (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
                     (rules/fire-rules))]
     ;;; Initialize with the session.
@@ -35,3 +34,5 @@
     (view/run session-atom)
     (when *test*
        (test/abuse session-atom 100 20))))
+
+(init)
