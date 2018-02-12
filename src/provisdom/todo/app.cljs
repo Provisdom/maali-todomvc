@@ -33,6 +33,6 @@
     (reset! session-atom session)
     (view/run session-atom)
     (when *test*
-       (test/abuse session-atom 100 20))))
+       (test/abuse session-atom 1000 20))))
 
 (init)

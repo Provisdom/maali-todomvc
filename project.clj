@@ -18,6 +18,7 @@
                                        :asset-path "cljs/out"
                                        :output-to  "resources/public/cljs/main.js"
                                        :output-dir "resources/public/cljs/out"
-                                       :verbose false}}]}
+                                       :verbose false
+                                       :parallel-build true}}]}
   :figwheel {:css-dirs ["resources/public/css"]
              :reload-clj-files {:clj false :cljc false}})

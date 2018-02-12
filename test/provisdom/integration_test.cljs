@@ -53,7 +53,7 @@
             (let [value (nth values value-index)
                   value-request (common/query-one :?request @session-atom ::input/value-request)]
               (common/respond-to value-request {::input/value value})
-              (<! (async/timeout (* 1.0 delay-ms)))
+              (<! (async/timeout delay-ms))
               (let [i (inc i)]
                 (if (< (rand) 0.01)
                   (recur i 0 0)
@@ -72,6 +72,11 @@
   (let [response (sg/generate (s/gen (request->response (rules/spec-type request))))]
     (assoc response ::common/Request request)))
 
+(defn gen-visibility-response
+  [visibility-request]
+  (let [response (gen-response visibility-request)]
+    (assoc response ::todo/visibility (sg/generate (s/gen (::todo/visibilities visibility-request))))))
+
 (defn select-request
   [session]
   (loop [i 0]
@@ -89,31 +94,51 @@
 
     (condp = (rules/spec-type request)
       ::todo/RetractTodoRequest
-      (check-invariant request result (= 1 (- (count old-todos) (count new-todos))))
+      (check-invariant request result (= 1 (- (count old-todos) (count new-todos)))
+                       {:old-count (count old-todos)
+                        :new-count (count new-todos)})
 
       ::input/InputRequest
-      (check-invariant request result (= (if result 1 0) (- (count new-todos) (count old-todos))))
+      (check-invariant request result (= (if result 1 0) (- (count new-todos) (count old-todos)))
+                       {:commit? result
+                        :old-count (count old-todos)
+                        :new-count (count new-todos)})
 
       ::todo/EditRequest
-      (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
+      (check-invariant request result (= 0 (- (count new-todos) (count old-todos)))
+                       {:old-count (count old-todos)
+                        :new-count (count new-todos)})
 
       ::todo/RetractCompletedRequest
-      (check-invariant request result (not-any? #(= true (::todo/done %)) new-todos))
+      (check-invariant request result (not-any? #(= true (::todo/done %)) new-todos)
+                       {:dones (map ::todo/done new-todos)})
 
       ::todo/CompleteAllRequest
       (do
-        (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
-        (check-invariant request result (not-any? #(= false (::todo/done %)) new-todos)))
+        (check-invariant request result (= 0 (- (count new-todos) (count old-todos)))
+                         {:old-count (count old-todos)
+                          :new-count (count new-todos)})
+        (check-invariant request result (not-any? #(= (not (::todo/done request)) (::todo/done %)) new-todos)
+                         {:toggle (not (::todo/done request))
+                          :dones (map ::todo/done new-todos)}))
 
       ::todo/VisibilityRequest
       (do
         (check-invariant request result (= 0 (- (count new-todos) (count old-todos))))
-        (check-invariant request result ((::todo/visibilities request) (::todo/visibility result)))
+        {:old-count (count old-todos)
+         :new-count (count new-todos)}
+        (check-invariant request result ((::todo/visibilities request) (::todo/visibility result))
+                         {:visibility (::todo/visibility result)
+                          :visibilities (::todo/visibilities request)})
         (let [visible-todos (common/query-many :?todo new-session ::todo/visible-todos)]
           (condp = (::todo/visibility result)
-            :all (check-invariant request result (= (count visible-todos) (count old-todos)))
-            :active (check-invariant request result (every? #(= false (::todo/done %)) visible-todos))
-            :completed (check-invariant request result (every? #(= true (::todo/done %)) visible-todos)))))
+            :all (check-invariant request result (= (count visible-todos) (count old-todos))
+                                  {:visible-count (count visible-todos)
+                                   :old-count (count old-todos)})
+            :active (check-invariant request result (every? #(= false (::todo/done %)) visible-todos)
+                                     {:dones (map ::todo/done new-todos)})
+            :completed (check-invariant request result (every? #(= true (::todo/done %)) visible-todos)
+                                        {:dones (map ::todo/done new-todos)}))))
       nil)))
 
 
@@ -127,13 +152,18 @@
               [query request] (select-request session)
               result (condp = (rules/spec-type request)
                        ::input/InputRequest
-                       (<! (input-responses request (rand-int 20) delay-ms))
+                       (<! (input-responses request (rand-int 20) (* 0.1 delay-ms)))
 
                        ::todo/EditRequest
                        (do
                          (common/respond-to request (gen-response request))
                          (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                           (<! (input-responses input (rand-int 20) delay-ms))))
+                           (<! (input-responses input (rand-int 20) (* 0.1 delay-ms)))))
+
+                       ::todo/VisibilityRequest
+                       (let [response (gen-visibility-response request)]
+                         (common/respond-to request response)
+                         response)
 
                        (let [response (gen-response request)]
                          (common/respond-to request response)

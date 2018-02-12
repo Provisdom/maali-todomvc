@@ -17,9 +17,6 @@
 (s/def ::response-fn (s/with-gen fn? #(sg/return (fn [_ _]))))
 (s/def ::ResponseFunction (s/keys :req [::response-fn]))
 
-(s/def ::time nat-int?)
-(defn now [] #?(:clj (System/currentTimeMillis) :cljs (.getTime (js/Date.))))
-
 ;;; Used to fill in the ::specs/response-fn field in requests.
 (defn response
   "Given a response-fn and a spec, return a function that calls response-fn

@@ -11,7 +11,7 @@
 (s/def ::id uuid?)
 (s/def ::title string?)
 (s/def ::done boolean?)
-(s/def ::created-at ::common/time)
+(s/def ::created-at nat-int?)
 (s/def ::Todo (s/keys :req [::id ::title ::done]))
 
 (s/def ::visibility #{:all :active :completed})
@@ -30,17 +30,19 @@
 (def-derive ::EditRequest ::common/Request (s/keys :req [::Todo]))
 
 ;;; Convenience function to create new ::Todo facts
+(defn now [] #?(:clj (System/currentTimeMillis) :cljs (.getTime (js/Date.))))
+
 (defn new-todo
-  ([title] (new-todo title (common/now)))
+  ([title] (new-todo title (now)))
   ([title time]
    {::id #?(:clj (UUID/randomUUID) :cljs (random-uuid)) ::title title ::done false ::created-at time}))
 
 ;;; Rules
 (defrules rules
-  [::anchor!
+  [::initialize-visibility!
    "Initialize visibility and the request for a new todo. Both are singletons
     so insert unconditionally here."
-   [::common/ResponseFunction (= ?response-fn response-fn)]
+   [:not [:exists [::Visibility]]]
    =>
    (rules/insert-unconditional! ::Visibility {::visibility :all})]
 
@@ -83,7 +85,7 @@
    [::input/InputResponse (= ?request Request) (= ?title value)]
    [?todo <- ::Todo]
    =>
-   (rules/upsert! ::Todo ?todo assoc ::title ?title ::common/time (common/now))]
+   (rules/upsert! ::Todo ?todo assoc ::title ?title)]
 
   [::new-todo-request!
    "Always want to allow a new todo to be entered, so if the input does not
