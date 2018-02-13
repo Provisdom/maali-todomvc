@@ -54,8 +54,9 @@
 
 (defn reload
   []
-  (when (not-empty @history)
-    (reset! session-atom (init-session))
-    (doseq [[spec response] @history]
-      (response-fn spec response)))
-  (println "RELOADED"))
+  (time
+    (when (not-empty @history)
+      (reset! session-atom (init-session))
+      (doseq [[spec response] @history]
+        (response-fn spec response))))
+  (println "RELOADED" (count @history)))
