@@ -41,31 +41,31 @@
    ::todo/VisibilityRequest       ::todo/VisibilityResponse})
 
 (defn input-responses
-  [input iterations delay-ms]
-  (let [session-atom (::common/session input)]
-    (async/go
-      (let [value (sg/generate (s/gen ::input/value))
-            values (reductions #(str %1 %2) "" value)]
-        (loop [i 0
-               value-index 0
-               backspaces 0]
-          (when (< i iterations)
-            (let [value (nth values value-index)
-                  value-request (common/query-one :?request @session-atom ::input/value-request)]
-              (common/respond-to value-request {::input/value value})
-              (<! (async/timeout delay-ms))
-              (let [i (inc i)]
-                (if (< (rand) 0.01)
-                  (recur i 0 0)
-                  (let [backspaces (if (and (= 0 backspaces) (< (rand) 0.1)) (rand-int (dec value-index)) (max 0 (dec backspaces)))
-                        value-index (if (= 0 backspaces) (min (dec (count values)) (inc value-index)) (max 0 (dec value-index)))]
-                    (recur i value-index backspaces)))))))
-        (let [commit-request (common/query-one :?request @session-atom ::input/commit-request)
-              commit? (and commit-request (< (rand) 0.9))]
-          (if commit?
-            (common/respond-to commit-request)
-            (common/cancel-request input))
-          commit?)))))
+  [session-atom input iterations delay-ms]
+  (async/go
+    (let [value (sg/generate (s/gen ::input/value))
+          values (reductions #(str %1 %2) "" value)]
+      (loop [i 0
+             value-index 0
+             backspaces 0]
+        (when (< i iterations)
+          (let [value (nth values value-index)
+                value-request (common/query-one :?request @session-atom ::input/value-request :?input input)]
+            (common/respond-to value-request {::input/value value})
+            (<! (async/timeout delay-ms))
+            (let [i (inc i)]
+              (if (< (rand) 0.01)
+                (recur i 0 0)
+                (let [backspaces (if (and (= 0 backspaces) (< (rand) 0.1)) (rand-int (dec value-index)) (max 0 (dec backspaces)))
+                      value-index (if (= 0 backspaces) (min (dec (count values)) (inc value-index)) (max 0 (dec value-index)))]
+                  (recur i value-index backspaces)))))))
+      (let [commit-request (common/query-one :?request @session-atom ::input/commit-request :?input input)
+            commit? (and commit-request (< (rand) 0.9))]
+        (if commit?
+          (common/respond-to commit-request)
+          (common/cancel-request input))
+        commit?))))
+
 
 (defn gen-response
   [request]
@@ -152,13 +152,13 @@
               [query request] (select-request session)
               result (condp = (rules/spec-type request)
                        ::input/InputRequest
-                       (<! (input-responses request (rand-int 20) (* 0.1 delay-ms)))
+                       (<! (input-responses session-atom request (rand-int 20) (* 0.1 delay-ms)))
 
                        ::todo/EditRequest
                        (do
                          (common/respond-to request (gen-response request))
                          (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                           (<! (input-responses input (rand-int 20) (* 0.1 delay-ms)))))
+                           (<! (input-responses session-atom input (rand-int 20) (* 0.1 delay-ms)))))
 
                        ::todo/VisibilityRequest
                        (let [response (gen-visibility-response request)]

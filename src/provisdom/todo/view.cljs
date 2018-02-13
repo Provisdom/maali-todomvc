@@ -45,14 +45,14 @@
       (when retract-request
         [:button.destroy {:on-click #(common/respond-to retract-request)}])]
      (when title-input
-       (input/text-input title-input :class "edit" :auto-focus true))]))
+       (input/text-input session title-input :class "edit" :auto-focus true))]))
 
 (rum/defc header [session]
   [:header#header
    [:h1 "todos"]
    (let [new-todo-input (common/query-one :?request session ::todo/input :?id "new-todo")]
      (when new-todo-input
-       (input/text-input new-todo-input :placeholder "What needs to be done?")))])
+       (input/text-input session new-todo-input :placeholder "What needs to be done?")))])
 
 (rum/defc complete-all [session]
   (let [complete-all-request (common/query-one :?request session ::todo/complete-all-request)]
@@ -73,7 +73,7 @@
        [:section#main
         (complete-all session)
         [:ul#todo-list
-         (for [todo (sort-by ::todo/created-at todos)]
+         (for [todo (sort-by ::todo/id todos)]
            (-> (item session todo)
                (rum/with-key (::todo/id todo))))]]
        [:footer#footer

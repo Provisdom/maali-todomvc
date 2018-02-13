@@ -3,12 +3,13 @@
             [provisdom.todo.common :as common]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [clara.rules.accumulators :as acc]
-            [provisdom.todo.text-input :as input])
+            [provisdom.todo.text-input :as input]
+            [hasch.core :as hasch])
   #?(:clj
      (:import (java.util UUID))))
 
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
-(s/def ::id uuid?)
+(s/def ::id ::common/id)
 (s/def ::title string?)
 (s/def ::done boolean?)
 (s/def ::created-at nat-int?)
@@ -35,7 +36,7 @@
 (defn new-todo
   ([title] (new-todo title (now)))
   ([title time]
-   {::id #?(:clj (UUID/randomUUID) :cljs (random-uuid)) ::title title ::done false ::created-at time}))
+   {::id (common/next-id) ::title title ::done false}))
 
 ;;; Rules
 (defrules rules
@@ -66,7 +67,7 @@
   [::retract-todo-response!
    "Handle response to retract todo request."
    [?request <- ::RetractTodoRequest (= ?todo Todo)]
-   [::common/Response (= ?request Request)]
+   [::common/Response (= ?request Request) #_(= ::RetractTodoRequest (rules/spec-type ?request))]
    =>
    (rules/retract! ::Todo ?todo)]
 
@@ -81,7 +82,7 @@
 
   [::update-title-response!
    "Update the title when the edit value is committed."
-   [?request <- ::input/InputRequest (= ?todo id)]
+   [?request <- ::input/InputRequest (= ?todo correlation-id)]
    [::input/InputResponse (= ?request Request) (= ?title value)]
    [?todo <- ::Todo]
    =>
@@ -90,14 +91,14 @@
   [::new-todo-request!
    "Always want to allow a new todo to be entered, so if the input does not
     exist, insert it."
-   [:not [::input/InputRequest (= "new-todo" id)]]
+   [:not [::input/InputRequest (= "new-todo" correlation-id)]]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert-unconditional! ::input/InputRequest (input/create "new-todo" "" ?response-fn))]
 
   [::new-todo-response!
    "Handle a new todo."
-   [?request <- ::input/InputRequest (= "new-todo" id)]
+   [?request <- ::input/InputRequest (= "new-todo" correlation-id)]
    [?input-value <- ::input/InputResponse (= ?request Request) (= ?title value)]
    =>
    (rules/insert-unconditional! ::Todo (new-todo ?title))
@@ -175,7 +176,7 @@
   [::completed-count [] [?count <- (acc/count) :from [::Todo (= true done)]]])
 
 (defqueries request-queries
-  [::input [:?id] [?request <- ::input/InputRequest (= ?id id)]]
+  [::input [:?id] [?request <- ::input/InputRequest (= ?id correlation-id)]]
   [::edit-request [:?todo] [?request <- ::EditRequest (= ?todo Todo)]]
   [::update-done-request [:?todo] [?request <- ::UpdateDoneRequest (= ?todo Todo)]]
   [::retract-todo-request [:?todo] [?request <- ::RetractTodoRequest (= ?todo Todo)]]
@@ -186,4 +187,6 @@
 (defsession init-session [provisdom.todo.common/rules
                           provisdom.todo.rules/rules
                           provisdom.todo.rules/view-queries
-                          provisdom.todo.rules/request-queries])
+                          provisdom.todo.rules/request-queries
+
+                          provisdom.todo.text-input/init-session])

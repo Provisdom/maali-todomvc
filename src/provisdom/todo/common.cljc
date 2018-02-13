@@ -8,7 +8,7 @@
             [hasch.core :as hasch]))
 
 (s/def ::session any?) ;;;TODO - figure out how to spec an atom containing a session
-(s/def ::id uuid?)
+(s/def ::id int?)
 (s/def ::Request (s/keys :req [::id]))
 (s/def ::Response (s/keys :req [::Request]))
 (def-derive ::Cancellable ::Request)
@@ -58,9 +58,11 @@
          (rules/insert spec response)
          (rules/fire-rules)))))
 
+(def request-id (atom 0))
+(defn next-id [] (swap! request-id inc))
 (defn request
   ([] (request {}))
-  ([req] (assoc req ::id (hasch/uuid)))
+  ([req] (assoc req ::id (next-id)))
   ([resp-spec resp-fn] (request {} resp-spec resp-fn))
   ([req resp-spec resp-fn]
    (response-fn (request req) (response resp-fn resp-spec))))

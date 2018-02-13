@@ -5,10 +5,10 @@
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [provisdom.todo.common :as common]))
 
-(s/def ::id any?)
+(s/def ::correlation-id any?)
 (s/def ::value string?)
 (s/def ::initial-value ::value)
-(def-derive ::InputRequest ::common/Request (s/keys :req [::id ::initial-value ::common/session]))
+(def-derive ::InputRequest ::common/Request (s/keys :req [::correlation-id ::initial-value]))
 (derive ::InputRequest ::common/Cancellable)
 (def-derive ::InputValueRequest ::common/Response (s/merge ::common/Request (s/keys :req [::value])))
 (derive ::InputValueRequest ::common/Request)
@@ -20,7 +20,7 @@
 (defrules base-rules
   [::value-request!
    "Create an InputValue fact to hold the current value of the Input."
-   [?input <- ::InputRequest (= ?initial-value initial-value)]
+   [?input <- ::InputRequest (= ?id correlation-id) (= ?initial-value initial-value)]
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert-unconditional! ::InputValueRequest (common/request {::common/Request ?input ::value ?initial-value} ::InputValueResponse ?response-fn))]
@@ -37,10 +37,11 @@
     the value has been committed."
    [?request <- ::CommitRequest (= ?input InputRequest)]
    [::common/Response (= ?request Request)]
-   [?input <- ::InputRequest]
+   [?input <- ::InputRequest (= ?id correlation-id)]
    [?input-value <- ::InputValueRequest (= ?value value) (= ?input Request)]
    =>
-   (common/respond-to ?input {::value ?value})])
+   (rules/insert! ::InputResponse {::common/Request ?input ::value ?value})
+   #_(common/respond-to ?input {::value ?value})])
 
 (defrules validation-rules
   [::comittable-input!
@@ -53,11 +54,11 @@
 
 ;;; Queries
 (defqueries request-queries
-  [::commit-request [] [?request <- ::CommitRequest]]
-  [::value-request [] [?request <- ::InputValueRequest]])
+  [::commit-request [:?input] [?request <- ::CommitRequest (= ?input InputRequest)]]
+  [::value-request [:?input] [?request <- ::InputValueRequest (= ?input Request)]])
 
 (defqueries view-queries
-  [::value [] [::InputValueRequest (= ?value value)]])
+  [::value [:?input] [::InputValueRequest (= ?value value) (= ?input Request)]])
 
 (defsession init-session [provisdom.todo.common/rules
                           provisdom.todo.text-input/base-rules
@@ -65,19 +66,14 @@
                           provisdom.todo.text-input/request-queries
                           provisdom.todo.text-input/view-queries])
 
+(defn session-meta
+  ([x] (-> x meta :session))
+  ([x s] (vary-meta x assoc :session s)))
+
 (defn create
-  [id initial-value commit-fn]
-  (let [session-atom (atom nil)
-        input-request (common/request {::id id ::initial-value initial-value ::common/session session-atom}
-                                      ::InputResponse commit-fn)
-        response-fn (fn [spec response]
-                      (swap! session-atom common/handle-response [spec response]))
-        session (-> init-session
-                    (rules/insert ::InputRequest input-request)
-                    (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
-                    (rules/fire-rules))]
-    (reset! session-atom session)
-    input-request))
+  [id initial-value response-fn]
+  (common/request {::correlation-id id ::initial-value initial-value}
+                  ::InputResponse response-fn))
 
 
 ;;; View
@@ -89,19 +85,19 @@
   (if (string? id) id (hasch/uuid id)))
 
 (rum/defc text-input < rum/reactive
-  [input & attrs]
-  (let [session (rum/react (::common/session input))
+  [session input & attrs]
+  (let [#_session #_(rum/react (session-meta input))
         attrs-map (into {} (map vec (partition 2 attrs)))
-        commit-request (common/query-one :?request session ::commit-request)
-        value-request (common/query-one :?request session ::value-request)
-        value (common/query-one :?value session ::value)]
+        commit-request (common/query-one :?request session ::commit-request :?input input)
+        value-request (common/query-one :?request session ::value-request :?input input)
+        value (common/query-one :?value session ::value :?input input)]
     (when value
       [:input
        (cond-> attrs-map
                (not commit-request) (update :class str " error")
                true (merge {:type        "text"
                             :value       value
-                            :id          (input-id (::id input))
+                            :id          (input-id (::correlation-id input))
                             :on-change   #(common/respond-to value-request {::value (-> % .-target .-value)})
                             :on-blur     #(if commit-request (common/respond-to commit-request) (common/cancel-request input))
                             :on-key-down #(let [key-code (.-keyCode %)]
