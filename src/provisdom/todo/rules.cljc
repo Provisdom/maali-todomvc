@@ -3,10 +3,7 @@
             [provisdom.todo.common :as common]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [clara.rules.accumulators :as acc]
-            [provisdom.todo.text-input :as input]
-            [hasch.core :as hasch])
-  #?(:clj
-     (:import (java.util UUID))))
+            [provisdom.todo.text-input :as input]))
 
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
 (s/def ::id ::common/id)

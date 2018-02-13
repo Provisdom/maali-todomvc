@@ -6,7 +6,6 @@
                  [org.clojure/test.check "0.9.0"]
                  [io.replikativ/hasch "0.3.4"]
                  [rum "0.11.0"]
-                 [alter-cljs "0.2.0"]
                  [provisdom/maali "0.0.1-SNAPSHOT"]]
   :repositories [["clojars" {:url "https://repo.clojars.org/"}] ["maven-central" {:url "https://repo1.maven.org/maven2"}]]
   :source-paths ["src" "test" "resources"]

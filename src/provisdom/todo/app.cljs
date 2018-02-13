@@ -1,11 +1,8 @@
 (ns provisdom.todo.app
-  (:require-macros [alter-cljs.core :refer [alter-var-root]])
   (:require [provisdom.todo.common :as common]
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
             [provisdom.maali.rules :refer-macros [defsession] :as rules]
-            [cljs.core.async :refer [<! >!] :as async]
-            [cljs.pprint :refer [pprint]]
             [provisdom.integration-test :as test]))
 
 
@@ -30,13 +27,13 @@
 
 (defn init-session
   []
-  (reset! common/request-id 0)
+  (reset! common/request-id 0) ;;; Reset this to ensure we get the same id's when replaying responses
   (-> (apply rules/insert todo/init-session ::todo/Todo [(todo/new-todo "Rename Cloact to Reagent" 1)
                                                          (todo/new-todo "Add undo demo" 2)
                                                          (todo/new-todo "Make all rendering async" 3)
                                                          (todo/new-todo "Allow any arguments to component functions" 4)])
       ;;; Use history-response-fn here if you want to remember history
-      (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
+      (rules/insert ::common/ResponseFunction {::common/response-fn history-response-fn})
       (rules/fire-rules)))
 
 ;;; HACK - is there a better way to call init-session and view/run only on load?
@@ -56,7 +53,8 @@
   []
   (time
     (when (not-empty @history)
+      (println "REPLAYING")
       (reset! session-atom (init-session))
       (doseq [[spec response] @history]
-        (response-fn spec response))))
-  (println "RELOADED" (count @history)))
+        (response-fn spec response))
+      (println "REPLAYED" (count @history)))))

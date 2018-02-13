@@ -4,10 +4,8 @@
             [clojure.test.check.generators]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [provisdom.maali.tracing :as tracing]
-            [#?(:clj clojure.pprint :cljs cljs.pprint) :refer [pprint]]
-            [hasch.core :as hasch]))
+            [#?(:clj clojure.pprint :cljs cljs.pprint) :refer [pprint]]))
 
-(s/def ::session any?) ;;;TODO - figure out how to spec an atom containing a session
 (s/def ::id int?)
 (s/def ::Request (s/keys :req [::id]))
 (s/def ::Response (s/keys :req [::Request]))

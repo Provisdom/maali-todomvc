@@ -2,9 +2,7 @@
   (:require [provisdom.todo.common :as common]
             [provisdom.todo.text-input :as input]
             [provisdom.todo.rules :as todo]
-            [provisdom.todo.view :as view]
             [provisdom.maali.rules :refer-macros [defqueries defsession check-invariant] :as rules]
-            [clara.tools.inspect :as inspect]
             [cljs.core.async :refer [<! >!] :as async]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as sg]
@@ -145,34 +143,36 @@
 (defn abuse
   [session-atom iterations delay-ms]
   (async/go
-    (loop [i 0]
-      (enable-console-print!)
-      (when (< i iterations)
-        (let [session @session-atom
-              [query request] (select-request session)
-              result (condp = (rules/spec-type request)
-                       ::input/InputRequest
-                       (<! (input-responses session-atom request (rand-int 20) (* 0.1 delay-ms)))
+    (enable-console-print!)
+    (time
+      (loop [i 0]
+        (enable-console-print!)
+        (when (< i iterations)
+          (let [session @session-atom
+                [query request] (select-request session)
+                result (condp = (rules/spec-type request)
+                         ::input/InputRequest
+                         (<! (input-responses session-atom request (rand-int 20) (* 0.1 delay-ms)))
 
-                       ::todo/EditRequest
-                       (do
-                         (common/respond-to request (gen-response request))
-                         (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
-                           (<! (input-responses session-atom input (rand-int 20) (* 0.1 delay-ms)))))
+                         ::todo/EditRequest
+                         (do
+                           (common/respond-to request (gen-response request))
+                           (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                             (<! (input-responses session-atom input (rand-int 20) (* 0.1 delay-ms)))))
 
-                       ::todo/VisibilityRequest
-                       (let [response (gen-visibility-response request)]
-                         (common/respond-to request response)
-                         response)
+                         ::todo/VisibilityRequest
+                         (let [response (gen-visibility-response request)]
+                           (common/respond-to request response)
+                           response)
 
-                       (let [response (gen-response request)]
-                         (common/respond-to request response)
-                         response))]
+                         (let [response (gen-response request)]
+                           (common/respond-to request response)
+                           response))]
 
-          (check-invariants request result session @session-atom)
+            (check-invariants request result session @session-atom)
 
-          (<! (async/timeout delay-ms))
-          (recur (inc i)))))
+            (<! (async/timeout delay-ms))
+            (recur (inc i))))))
     (println "DONE!")))
 
 
