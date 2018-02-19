@@ -28,10 +28,10 @@
 (defn init-session
   []
   (reset! common/request-id 0) ;;; Reset this to ensure we get the same id's when replaying responses
-  (-> (apply rules/insert todo/init-session ::todo/Todo [(todo/new-todo "Rename Cloact to Reagent" 1)
-                                                         (todo/new-todo "Add undo demo" 2)
-                                                         (todo/new-todo "Make all rendering async" 3)
-                                                         (todo/new-todo "Allow any arguments to component functions" 4)])
+  (-> (apply rules/insert todo/init-session ::todo/Todo [(todo/new-todo "Rename Cloact to Reagent")
+                                                         (todo/new-todo "Add undo demo")
+                                                         (todo/new-todo "Make all rendering async")
+                                                         (todo/new-todo "Allow any arguments to component functions")])
       ;;; Use history-response-fn here if you want to remember history
       (rules/insert ::common/ResponseFunction {::common/response-fn history-response-fn})
       (rules/fire-rules)))

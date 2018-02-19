@@ -28,12 +28,10 @@
 (def-derive ::EditRequest ::common/Request (s/keys :req [::Todo]))
 
 ;;; Convenience function to create new ::Todo facts
-(defn now [] #?(:clj (System/currentTimeMillis) :cljs (.getTime (js/Date.))))
 
 (defn new-todo
-  ([title] (new-todo title (now)))
-  ([title time]
-   {::id (common/next-id) ::title title ::done false}))
+  [title]
+  {::id (common/next-id) ::title title ::done false})
 
 ;;; Rules
 (defrules rules
