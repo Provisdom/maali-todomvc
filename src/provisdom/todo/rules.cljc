@@ -9,7 +9,6 @@
 (s/def ::id ::common/id)
 (s/def ::title string?)
 (s/def ::done boolean?)
-(s/def ::created-at nat-int?)
 (s/def ::Todo (s/keys :req [::id ::title ::done]))
 
 (s/def ::visibility #{:all :active :completed})
