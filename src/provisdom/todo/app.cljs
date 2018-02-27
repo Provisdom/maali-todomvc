@@ -3,7 +3,7 @@
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
             [provisdom.maali.rules :refer-macros [defsession] :as rules]
-            [provisdom.integration-test :as test]))
+            [provisdom.todo.integration-test :as test]))
 
 
 #_(st/instrument)
@@ -33,7 +33,7 @@
                                                          (todo/new-todo "Make all rendering async")
                                                          (todo/new-todo "Allow any arguments to component functions")])
       ;;; Use history-response-fn here if you want to remember history
-      (rules/insert ::common/ResponseFunction {::common/response-fn history-response-fn})
+      (rules/insert ::common/ResponseFunction {::common/response-fn response-fn})
       (rules/fire-rules)))
 
 ;;; HACK - is there a better way to call init-session and view/run only on load?

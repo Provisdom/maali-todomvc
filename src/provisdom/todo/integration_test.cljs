@@ -1,4 +1,4 @@
-(ns provisdom.integration-test
+(ns provisdom.todo.integration-test
   (:require [provisdom.todo.common :as common]
             [provisdom.todo.text-input :as input]
             [provisdom.todo.rules :as todo]
@@ -174,5 +174,3 @@
             (<! (async/timeout delay-ms))
             (recur (inc i))))))
     (println "DONE!")))
-
-

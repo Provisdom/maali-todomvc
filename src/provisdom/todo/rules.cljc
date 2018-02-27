@@ -5,6 +5,7 @@
             [clara.rules.accumulators :as acc]
             [provisdom.todo.text-input :as input]))
 
+
 ;;; Fact specs. Use convention that specs for fact "types" are camel-cased.
 (s/def ::id ::common/id)
 (s/def ::title string?)
@@ -73,6 +74,17 @@
    [::common/ResponseFunction (= ?response-fn response-fn)]
    =>
    (rules/insert! ::input/InputRequest (input/create ?todo ?title ?response-fn))]
+
+  [::comittable-todo!
+   "If the value of the InputValueRequest is not empty, it is legal to commit the value."
+   [?input-value <- ::input/InputValueRequest (= ?input Request) (not-empty value)]
+   [?input <- ::input/InputRequest (= ?id correlation-id)]
+   [:or
+    [?id <- ::Todo]
+    [:test (= "new-todo" ?id)]]
+   [::common/ResponseFunction (= ?response-fn response-fn)]
+   =>
+   (rules/insert! ::input/CommitRequest (common/request {::input/InputRequest ?input} ::common/Response ?response-fn))]
 
   [::update-title-response!
    "Update the title when the edit value is committed."
@@ -178,9 +190,8 @@
   [::retract-complete-request [] [?request <- ::RetractCompletedRequest]]
   [::visibility-request [] [?request <- ::VisibilityRequest]])
 
-(defsession init-session [provisdom.todo.common/rules
-                          provisdom.todo.rules/rules
-                          provisdom.todo.rules/view-queries
-                          provisdom.todo.rules/request-queries
-
-                          provisdom.todo.text-input/init-session])
+(defsession init-session [common/rules
+                          input/init-session
+                          rules
+                          view-queries
+                          request-queries])

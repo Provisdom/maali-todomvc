@@ -1,0 +1,30 @@
+{
+  "name": "maali-todomvc",
+  "version": "1.0.0",
+  "description": "Implementation of TODOMVC using [maali](https://github.com/Provisdom/maali), a library for rules-based processing built on [clara-rules](https://github.com/cerner/clara-rules).",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Provisdom/maali-todomvc.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Provisdom/maali-todomvc/issues"
+  },
+  "homepage": "https://github.com/Provisdom/maali-todomvc#readme",
+  "devDependencies": {
+    "shadow-cljs": "^2.1.26"
+  },
+  "dependencies": {
+    "create-react-class": "^15.6.3",
+    "react": "^16.2.0",
+    "react-dom": "^16.2.0"
+  }
+}

@@ -6,14 +6,15 @@
                  [org.clojure/test.check "0.9.0"]
                  [io.replikativ/hasch "0.3.4"]
                  [rum "0.11.0"]
-                 [provisdom/maali "0.0.1-SNAPSHOT"]]
+                 [provisdom/maali "0.0.1-SNAPSHOT"]
+                 [thheller/shadow-cljs "2.1.28"]]
   :repositories [["clojars" {:url "https://repo.clojars.org/"}] ["maven-central" {:url "https://repo1.maven.org/maven2"}]]
   :source-paths ["src" "test" "resources"]
   :plugins [[lein-figwheel "0.5.14"]]
   :clean-targets ^{:protect false} [:target-path "out" "resources/public/cljs"]
   :cljsbuild {:builds [{:id           "dev"
                         :source-paths ["src" "test"]
-                        :figwheel     {:on-jsload "provisdom.todo.app/reload"}
+                        :dependencies [thheller/shadow-cljs "2.1.28"]
                         :compiler     {:main "provisdom.todo.app"
                                        :asset-path "cljs/out"
                                        :output-to  "resources/public/cljs/main.js"
