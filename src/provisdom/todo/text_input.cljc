@@ -3,7 +3,7 @@
             [rum.core :as rum]
             [hasch.core :as hasch]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
-            [provisdom.todo.common :as common]))
+            [provisdom.maali.common :as common]))
 
 (s/def ::correlation-id any?)
 (s/def ::value string?)

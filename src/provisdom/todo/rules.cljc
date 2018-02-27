@@ -1,6 +1,6 @@
 (ns provisdom.todo.rules
   (:require [clojure.spec.alpha :as s]
-            [provisdom.todo.common :as common]
+            [provisdom.maali.common :as common]
             [provisdom.maali.rules #?(:clj :refer :cljs :refer-macros) [defrules defqueries defsession def-derive] :as rules]
             [clara.rules.accumulators :as acc]
             [provisdom.todo.text-input :as input]))

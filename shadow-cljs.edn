@@ -19,6 +19,7 @@
         :modules {:main {:entries [provisdom.todo.app]}}
         :devtools {:http-root "public"
                    :http-port 8080
-                   :after-load provisdom.todo.app/reload}}}
+                   :after-load provisdom.todo.app/reload
+                   :hud false}}}
  :nrepl {:port 9999
          :middleware []}}

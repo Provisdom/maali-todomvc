@@ -1,5 +1,5 @@
 (ns provisdom.todo.app
-  (:require [provisdom.todo.common :as common]
+  (:require [provisdom.maali.common :as common]
             [provisdom.todo.rules :as todo]
             [provisdom.todo.view :as view]
             [provisdom.maali.rules :refer-macros [defsession] :as rules]
@@ -47,7 +47,7 @@
 ;;; Uncomment to run tests. First argument is the number
 ;;; of app-level responses simulated, second is delay in
 ;;; milliseconds between responses.
-#_(test/abuse session-atom 100 20)
+#_(test/abuse session-atom 1000 20)
 
 (defn reload
   []

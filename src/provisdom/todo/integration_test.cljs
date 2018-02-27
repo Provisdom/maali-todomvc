@@ -1,5 +1,5 @@
 (ns provisdom.todo.integration-test
-  (:require [provisdom.todo.common :as common]
+  (:require [provisdom.maali.common :as common]
             [provisdom.todo.text-input :as input]
             [provisdom.todo.rules :as todo]
             [provisdom.maali.rules :refer-macros [defqueries defsession check-invariant] :as rules]

@@ -1,6 +1,6 @@
 (ns provisdom.todo.view
   (:require [rum.core :as rum]
-            [provisdom.todo.common :as common]
+            [provisdom.maali.common :as common]
             [provisdom.todo.rules :as todo]
             [provisdom.todo.text-input :as input]))
 
