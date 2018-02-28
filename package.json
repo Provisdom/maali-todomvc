@@ -20,7 +20,7 @@
   },
   "homepage": "https://github.com/Provisdom/maali-todomvc#readme",
   "devDependencies": {
-    "shadow-cljs": "^2.1.26"
+    "shadow-cljs": "^2.2.1"
   },
   "dependencies": {
     "create-react-class": "^15.6.3",

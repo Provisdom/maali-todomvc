@@ -1,5 +1,6 @@
 ;; shadow-cljs configuration
-{:source-paths
+{:lein {:profile "dev"}
+ :source-paths
  ["src"]
 
  :dependencies

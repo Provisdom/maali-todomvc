@@ -21,3 +21,4 @@ cljs
 node_modules
 public/js
 *.log
+.shadow-cljs
