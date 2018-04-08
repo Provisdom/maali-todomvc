@@ -48,7 +48,7 @@
              backspaces 0]
         (when (< i iterations)
           (let [value (nth values value-index)
-                value-request (common/query-one :?request @session-atom ::input/value-request :?input input)]
+                value-request (rules/query-one :?request @session-atom ::input/value-request :?input input)]
             (common/respond-to value-request {::input/value value})
             (<! (async/timeout delay-ms))
             (let [i (inc i)]
@@ -57,7 +57,7 @@
                 (let [backspaces (if (and (= 0 backspaces) (< (rand) 0.1)) (rand-int (dec value-index)) (max 0 (dec backspaces)))
                       value-index (if (= 0 backspaces) (min (dec (count values)) (inc value-index)) (max 0 (dec value-index)))]
                   (recur i value-index backspaces)))))))
-      (let [commit-request (common/query-one :?request @session-atom ::input/commit-request :?input input)
+      (let [commit-request (rules/query-one :?request @session-atom ::input/commit-request :?input input)
             commit? (and commit-request (< (rand) 0.9))]
         (if commit?
           (common/respond-to commit-request)
@@ -87,8 +87,8 @@
 
 (defn check-invariants
   [request result old-session new-session]
-  (let [old-todos (common/query-many :?todo old-session ::todo/todos)
-        new-todos (common/query-many :?todo new-session ::todo/todos)]
+  (let [old-todos (rules/query-many :?todo old-session ::todo/todos)
+        new-todos (rules/query-many :?todo new-session ::todo/todos)]
 
     (condp = (rules/spec-type request)
       ::todo/RetractTodoRequest
@@ -128,7 +128,7 @@
         (check-invariant request result ((::todo/visibilities request) (::todo/visibility result))
                          {:visibility (::todo/visibility result)
                           :visibilities (::todo/visibilities request)})
-        (let [visible-todos (common/query-many :?todo new-session ::todo/visible-todos)]
+        (let [visible-todos (rules/query-many :?todo new-session ::todo/visible-todos)]
           (condp = (::todo/visibility result)
             :all (check-invariant request result (= (count visible-todos) (count old-todos))
                                   {:visible-count (count visible-todos)
@@ -157,7 +157,7 @@
                          ::todo/EditRequest
                          (do
                            (common/respond-to request (gen-response request))
-                           (let [input (common/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
+                           (let [input (rules/query-one :?request @session-atom ::todo/input :?id (::todo/Todo request))]
                              (<! (input-responses session-atom input (rand-int 20) (* 0.1 delay-ms)))))
 
                          ::todo/VisibilityRequest

@@ -70,9 +70,9 @@
 (rum/defc text-input < rum/reactive
   [session input & attrs]
   (let [attrs-map (into {} (map vec (partition 2 attrs)))
-        commit-request (common/query-one :?request session ::commit-request :?input input)
-        value-request (common/query-one :?request session ::value-request :?input input)
-        value (common/query-one :?value session ::value :?input input)]
+        commit-request (rules/query-one :?request session ::commit-request :?input input)
+        value-request (rules/query-one :?request session ::value-request :?input input)
+        value (rules/query-one :?value session ::value :?input input)]
     (when value
       [:input
        (cond-> attrs-map

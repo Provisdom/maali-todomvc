@@ -2,14 +2,15 @@
   (:require [rum.core :as rum]
             [provisdom.maali.common :as common]
             [provisdom.todo.rules :as todo]
-            [provisdom.todo.text-input :as input]))
+            [provisdom.todo.text-input :as input]
+            [provisdom.maali.rules :as rules]))
 
 ;;; View components
 (rum/defc stats [session]
-  (let [visibility-request (common/query-one :?request session ::todo/visibility-request)
-        retract-complete-request (common/query-one :?request session ::todo/retract-complete-request)
-        active-count (common/query-one :?count session ::todo/active-count)
-        completed-count (common/query-one :?count session ::todo/completed-count)
+  (let [visibility-request (rules/query-one :?request session ::todo/visibility-request)
+        retract-complete-request (rules/query-one :?request session ::todo/retract-complete-request)
+        active-count (rules/query-one :?count session ::todo/active-count)
+        completed-count (rules/query-one :?count session ::todo/completed-count)
         visibilities (or (::todo/visibilities visibility-request) #{})
         props-for (fn [name]
                     (cond->
@@ -30,10 +31,10 @@
 
 (rum/defc item [session todo]
   (let [{::todo/keys [id done title]} todo
-        edit-request (common/query-one :?request session ::todo/edit-request :?todo todo)
-        title-input (common/query-one :?request session ::todo/input :?id todo)
-        done-request (common/query-one :?request session ::todo/update-done-request :?todo todo)
-        retract-request (common/query-one :?request session ::todo/retract-todo-request :?todo todo)]
+        edit-request (rules/query-one :?request session ::todo/edit-request :?todo todo)
+        title-input (rules/query-one :?request session ::todo/input :?id todo)
+        done-request (rules/query-one :?request session ::todo/update-done-request :?todo todo)
+        retract-request (rules/query-one :?request session ::todo/retract-todo-request :?todo todo)]
     [:li {:class (str (if done "completed ")
                       (if title-input "editing"))}
      [:div.view
@@ -50,12 +51,12 @@
 (rum/defc header [session]
   [:header#header
    [:h1 "todos"]
-   (let [new-todo-input (common/query-one :?request session ::todo/input :?id "new-todo")]
+   (let [new-todo-input (rules/query-one :?request session ::todo/input :?id "new-todo")]
      (when new-todo-input
        (input/text-input session new-todo-input :placeholder "What needs to be done?")))])
 
 (rum/defc complete-all [session]
-  (let [complete-all-request (common/query-one :?request session ::todo/complete-all-request)]
+  (let [complete-all-request (rules/query-one :?request session ::todo/complete-all-request)]
     (when complete-all-request
       (let [complete-all (::todo/done complete-all-request)]
         [:div
@@ -65,7 +66,7 @@
 
 (rum/defc app < rum/reactive [session-atom]
   (let [session (rum/react session-atom)
-        todos (common/query-many :?todo session ::todo/visible-todos)]
+        todos (rules/query-many :?todo session ::todo/visible-todos)]
     [:div
      [:section#todoapp
       (header session)
